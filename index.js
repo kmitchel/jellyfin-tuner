@@ -184,6 +184,9 @@ app.get('/stream/:channelNum', async (req, res) => {
     const tempConfPath = path.join(os.tmpdir(), `zap-${tuner.id}-${channel.serviceId}.conf`);
     fs.writeFileSync(tempConfPath, matchedBlock); // matchedBlock already starts with [
 
+    // Allow the hardware connection to settle before retuning
+    await delay(500);
+
     // 1. Start dvbv5-zap with temp config
     // We use the UNIQUE name we just generated: "Name-ServiceID"
     const uniqueName = `${channel.name}-${channel.serviceId}`;
@@ -219,8 +222,8 @@ app.get('/stream/:channelNum', async (req, res) => {
     // -c copy : copy stream
     // -f mpegts : output format
     const ffmpegArgs = [
-        '-analyzeduration', '1000000',
-        '-probesize', '1000000',
+        '-analyzeduration', '2000000',
+        '-probesize', '2000000',
         '-i', dvrPath,
         '-c', 'copy',
         '-f', 'mpegts',
