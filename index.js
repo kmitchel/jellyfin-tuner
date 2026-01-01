@@ -150,19 +150,34 @@ app.get('/stream/:channelNum', async (req, res) => {
     const dvrPath = `${tuner.adapter}/dvr0`;
 
     // FFmpeg options:
-    // -analyzeduration/probesize: limit startup latency
     // -i : input path
-    // -c copy : copy stream (fix .ts errors naturally by repacking)
+    // -map 0:p:<serviceId> : Select the specific program/service ID from the TS
+    // -c copy : copy stream
     // -f mpegts : output format
-    // pipe:1 : output to stdout
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpegArgs = [
         '-analyzeduration', '1000000',
         '-probesize', '1000000',
         '-i', dvrPath,
+    ];
+
+    if (channel.serviceId) {
+        console.log(`Filtering for Service ID: ${channel.serviceId}`);
+        // Map the specific program ID. 
+        // Syntax often is -map 0:p:<program_id> or just relying on the player to pick if we send all.
+        // But since you said 45.1 plays when 45.2 is asked, we are sending both and player picks first.
+        // We need to valid stream mapping. 
+        // ffmpeg -i input.ts -map 0:p:1001 -c copy ...
+        ffmpegArgs.push('-map', `0:p:${channel.serviceId}`);
+        // Note: some ffmpeg versions use -map 0:m:program_id or similar. '0:p:ID' is standard for program mapping.
+    }
+
+    ffmpegArgs.push(
         '-c', 'copy',
         '-f', 'mpegts',
         'pipe:1'
-    ]);
+    );
+
+    const ffmpeg = spawn('ffmpeg', ffmpegArgs);
     tuner.processes.ffmpeg = ffmpeg;
 
     res.writeHead(200, {
