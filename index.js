@@ -132,74 +132,20 @@ app.get('/stream/:channelNum', async (req, res) => {
     tuner.inUse = true;
     tuner.processes = {};
 
-    // Generate a temporary config entry to ensure unique tuning by Service ID
-    // valid channels.conf format is INI-style:
-    // [Name]
-    //    KEY = VALUE
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
 
-    // Read the main channels config
-    let configContent = '';
-    try {
-        configContent = fs.readFileSync(CHANNELS_CONF, 'utf8');
-    } catch (e) {
-        console.error('Failed to read channels.conf', e);
-        // Release tuner if config fails
-        tuner.inUse = false;
-        return res.status(500).send('Config error');
-    }
-
-    // Find the block corresponding to the requested channel name AND Service ID
-    // We are looking for a block starting with [channel.name] and containing SERVICE_ID = channel.serviceId
-    // Since names are duplicate, we must iterate all blocks with that name.
-
-    // Simple parser: split by headlines
-    const entries = configContent.split('[');
-    let matchedBlock = null;
-
-    for (const entry of entries) {
-        if (!entry.trim()) continue;
-        const lines = entry.split('\n');
-        const entryName = lines[0].replace(']', '').trim();
-
-        if (entryName === channel.name) {
-            // Check for service ID
-            const serviceIdLine = lines.find(l => l.trim().startsWith('SERVICE_ID'));
-            if (serviceIdLine && serviceIdLine.includes(channel.serviceId)) {
-                matchedBlock = `[${channel.name}-${channel.serviceId}]\n` + lines.slice(1).join('\n');
-                break;
-            }
-        }
-    }
-
-    if (!matchedBlock) {
-        console.error(`Could not find config entry for ${channel.name} with SID ${channel.serviceId}`);
-        // Fallback to name-only tuning (might pick wrong one)
-        matchedBlock = `[${channel.name}]\nSERVICE_ID=${channel.serviceId}\n`; // unsafe fallback
-    }
-
-    // Write temp config
-    const tempConfPath = path.join(os.tmpdir(), `zap-${tuner.id}-${channel.serviceId}.conf`);
-    fs.writeFileSync(tempConfPath, matchedBlock); // matchedBlock already starts with [
 
     // Allow the hardware connection to settle before retuning
     // Increased to 1000ms to reduce power contention on dual USB tuners
     await delay(1000);
 
-    // 1. Start dvbv5-zap with temp config
-    // We use the UNIQUE name we just generated: "Name-ServiceID"
-    const uniqueName = `${channel.name}-${channel.serviceId}`;
-
     // Use '-o -' to pipe the MPEG-TS stream to stdout. 
     // This avoids 'Device or resource busy' errors on /dev/dvb/.../dvr0
     const zap = spawn('dvbv5-zap', [
-        '-c', tempConfPath,
+        '-c', CHANNELS_CONF,
         '-r',
         '-a', tuner.id,
         '-o', '-',
-        uniqueName
+        channel.name
     ]);
     tuner.processes.zap = zap;
 
