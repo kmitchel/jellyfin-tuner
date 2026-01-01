@@ -206,8 +206,8 @@ app.get('/stream/:channelNum', async (req, res) => {
     // -c copy : copy stream
     // -f mpegts : output format
     const ffmpegArgs = [
-        '-analyzeduration', '10000000',
-        '-probesize', '10000000',
+        '-analyzeduration', '1000000',
+        '-probesize', '1000000',
         '-i', dvrPath,
         '-c', 'copy',
         '-f', 'mpegts',
