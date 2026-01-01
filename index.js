@@ -146,6 +146,11 @@ app.get('/stream/:channelNum', async (req, res) => {
     // Wait slightly for lock? Or just start ffmpeg immediately. 
     // Usually safe to start ffmpeg immediately as it will block on reading dvr0 until data arrives.
 
+    // Wait for the tuner to lock and populate the DVR buffer
+    // This prevents ffmpeg from failing to find the program ID in the initial probe
+    console.log('Waiting for tuner lock...');
+    await delay(2000);
+
     // 2. Start ffmpeg to read from dvr0 and pipe to response
     const dvrPath = `${tuner.adapter}/dvr0`;
 
@@ -155,8 +160,8 @@ app.get('/stream/:channelNum', async (req, res) => {
     // -c copy : copy stream
     // -f mpegts : output format
     const ffmpegArgs = [
-        '-analyzeduration', '1000000',
-        '-probesize', '1000000',
+        '-analyzeduration', '10000000',
+        '-probesize', '10000000',
         '-i', dvrPath,
     ];
 
