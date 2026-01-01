@@ -234,6 +234,23 @@ app.get('/stream/:channelNum', async (req, res) => {
         'Connection': 'keep-alive'
     });
 
+    // Connection Watchdog
+    // If the client stops reading data (e.g. mpv left open but paused/broken),
+    // the pipe will backpressure and ffmpeg will stop emitting data.
+    tuner.lastActivity = Date.now();
+    tuner.watchdogInterval = setInterval(() => {
+        const inactivity = Date.now() - tuner.lastActivity;
+        if (inactivity > 30000) { // 30s timeout
+            console.warn(`[Tuner ${tuner.id}] Watchdog: Client stalled for ${Math.round(inactivity / 1000)}s - releasing.`);
+            cleanup();
+        }
+    }, 5000);
+
+    // Update activity on every data chunk sent to client
+    ffmpeg.stdout.on('data', () => {
+        tuner.lastActivity = Date.now();
+    });
+
     // Handle ffmpeg output pipe errors (e.g. client disconnect)
     ffmpeg.stdout.on('error', (err) => {
         if (err.code === 'EPIPE' || err.code === 'ECONNRESET') {
@@ -259,6 +276,12 @@ app.get('/stream/:channelNum', async (req, res) => {
         tuner.cleaningUp = true;
 
         console.log(`Cleaning up Tuner ${tuner.id}`);
+
+        // Clear Watchdog
+        if (tuner.watchdogInterval) {
+            clearInterval(tuner.watchdogInterval);
+            tuner.watchdogInterval = null;
+        }
 
         // Remove the killSwitch reference so we don't call it again
         tuner.killSwitch = null;
