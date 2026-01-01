@@ -65,25 +65,36 @@ loadChannels();
 // Helper: Promise-based delay
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: Acquire a SPECIFIC tuner, preempting if necessary
-async function acquireSpecificTuner(tunerId) {
-    const tuner = TUNERS.find(t => t.id === parseInt(tunerId));
-    if (!tuner) return null;
+// Helper: Acquire an available tuner, preempting if necessary
+async function acquireTuner() {
+    // 1. Try to find a free tuner
+    let tuner = TUNERS.find(t => !t.inUse);
+    if (tuner) return tuner;
 
-    if (!tuner.inUse) return tuner;
+    // 2. If all busy, try to preempt one (LIFO/FIFO policy? Just pick the first for now)
+    // We prefer a tuner that is not 'cleaningUp' (i.e. currently streaming).
+    tuner = TUNERS.find(t => !t.cleaningUp);
 
-    console.log(`Preempting Tuner ${tuner.id} for new request...`);
-    if (tuner.killSwitch) {
-        tuner.killSwitch(); // Trigger cleanup of the active stream
+    if (tuner) {
+        console.log(`Preempting Tuner ${tuner.id} for new request...`);
+        if (tuner.killSwitch) {
+            tuner.killSwitch(); // Trigger cleanup of the active stream
+        }
+        // Wait for it to become free (max 3s)
+        for (let i = 0; i < 15; i++) {
+            if (!tuner.inUse) return tuner;
+            await delay(200);
+        }
+        console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
     }
 
-    // Wait for it to become free (max 3s)
-    for (let i = 0; i < 15; i++) {
-        if (!tuner.inUse) return tuner;
-        await delay(200);
+    // 3. Last ditch: wait for any tuner
+    for (let i = 0; i < 10; i++) {
+        tuner = TUNERS.find(t => !t.inUse);
+        if (tuner) return tuner;
+        await delay(500);
     }
 
-    console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
     return null;
 }
 
@@ -110,7 +121,6 @@ app.get('/stream/:channelNum', async (req, res) => {
         return res.status(404).send('Channel not found');
     }
 
-
     // Acquire any available tuner
     const tuner = await acquireTuner();
 
@@ -119,20 +129,9 @@ app.get('/stream/:channelNum', async (req, res) => {
     }
 
     console.log(`Acquired Tuner ${tuner.id} for ${channel.name}`);
-
-    // Double-check: ensure no zombies exist
-    if (tuner.processes && (tuner.processes.zap || tuner.processes.ffmpeg)) {
-        console.warn(`Force killing lingering processes on Tuner ${tuner.id} before start`);
-        if (tuner.processes.zap) try { tuner.processes.zap.kill('SIGKILL'); } catch (e) { }
-        if (tuner.processes.ffmpeg) try { tuner.processes.ffmpeg.kill('SIGKILL'); } catch (e) { }
-        tuner.processes = {};
-    }
-
     console.log(`Starting stream for ${channel.name} on Tuner ${tuner.id}`);
     tuner.inUse = true;
     tuner.processes = {};
-
-
 
     // Allow the hardware connection to settle before retuning
     // Increased to 1000ms to reduce power contention on dual USB tuners
