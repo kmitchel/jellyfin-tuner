@@ -139,6 +139,16 @@ app.get('/stream/:tunerName/:channelNum', async (req, res) => {
         return res.status(503).send(`Tuner ${targetTunerId} is busy or unavailable`);
     }
 
+    console.log(`Acquired Tuner ${tuner.id} for ${channel.name}`);
+
+    // Double-check: ensure no zombies exist
+    if (tuner.processes && (tuner.processes.zap || tuner.processes.ffmpeg)) {
+        console.warn(`Force killing lingering processes on Tuner ${tuner.id} before start`);
+        if (tuner.processes.zap) try { tuner.processes.zap.kill('SIGKILL'); } catch (e) { }
+        if (tuner.processes.ffmpeg) try { tuner.processes.ffmpeg.kill('SIGKILL'); } catch (e) { }
+        tuner.processes = {};
+    }
+
     console.log(`Starting stream for ${channel.name} on Tuner ${tuner.id}`);
     tuner.inUse = true;
     tuner.processes = {};
@@ -194,6 +204,10 @@ app.get('/stream/:tunerName/:channelNum', async (req, res) => {
     // Write temp config
     const tempConfPath = path.join(os.tmpdir(), `zap-${tuner.id}-${channel.serviceId}.conf`);
     fs.writeFileSync(tempConfPath, matchedBlock); // matchedBlock already starts with [
+
+    // Allow the hardware connection to settle before retuning
+    // Increased to 1000ms to reduce power contention on dual USB tuners
+    await delay(1000);
 
     // 1. Start dvbv5-zap with temp config
     // We use the UNIQUE name we just generated: "Name-ServiceID"
