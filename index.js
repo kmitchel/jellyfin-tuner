@@ -65,67 +65,78 @@ loadChannels();
 // Helper: Promise-based delay
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: Acquire a tuner, preempting if necessary
-async function acquireTuner() {
-    // 1. Try to find a free tuner
-    let tuner = TUNERS.find(t => !t.inUse);
-    if (tuner) return tuner;
+// Helper: Acquire a SPECIFIC tuner, preempting if necessary
+async function acquireSpecificTuner(tunerId) {
+    const tuner = TUNERS.find(t => t.id === parseInt(tunerId));
+    if (!tuner) return null;
 
-    // 2. If all busy, try to preempt one (LIFO/FIFO policy? Just pick the first for now)
-    // We prefer a tuner that is not 'cleaningUp' (i.e. currently streaming).
-    tuner = TUNERS.find(t => !t.cleaningUp);
+    if (!tuner.inUse) return tuner;
 
-    if (tuner) {
-        console.log(`Preempting Tuner ${tuner.id} for new request request...`);
-        if (tuner.killSwitch) {
-            tuner.killSwitch(); // Trigger cleanup of the active stream
-        }
-        // Wait for it to become free (max 3s)
-        for (let i = 0; i < 15; i++) {
-            if (!tuner.inUse) return tuner;
-            await delay(200);
-        }
-        console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
+    console.log(`Preempting Tuner ${tuner.id} for new request...`);
+    if (tuner.killSwitch) {
+        tuner.killSwitch(); // Trigger cleanup of the active stream
     }
 
-    // 3. Last ditch: wait for any tuner
-    for (let i = 0; i < 10; i++) {
-        tuner = TUNERS.find(t => !t.inUse);
-        if (tuner) return tuner;
-        await delay(500);
+    // Wait for it to become free (max 3s)
+    for (let i = 0; i < 15; i++) {
+        if (!tuner.inUse) return tuner;
+        await delay(200);
     }
 
+    console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
     return null;
 }
 
-// Generate M3U Playlist
-app.get('/lineup.m3u', (req, res) => {
+// Generate M3U Playlist for a specific tuner
+// Matches /tuner0.m3u, /tuner1.m3u
+app.get('/:tunerName.m3u', (req, res) => {
+    const tunerName = req.params.tunerName;
+
+    // Validate tuner name format "tunerX"
+    const match = tunerName.match(/^tuner(\d+)$/);
+    if (!match) {
+        return res.status(404).send('Invalid playlist request. Use /tuner0.m3u, /tuner1.m3u etc.');
+    }
+
+    const tunerId = parseInt(match[1]);
+    const tuner = TUNERS.find(t => t.id === tunerId);
+
+    if (!tuner) {
+        return res.status(404).send(`Tuner ${tunerId} not found`);
+    }
+
     let m3u = '#EXTM3U\n';
     const host = req.headers.host;
 
     CHANNELS.forEach(channel => {
         m3u += `#EXTINF:-1 tvg-id="${channel.number}" tvg-name="${channel.name}",${channel.number} ${channel.name}\n`;
-        m3u += `http://${host}/stream/${channel.number}\n`;
+        // Generates: http://host/stream/tuner0/45.1
+        m3u += `http://${host}/stream/${tunerName}/${channel.number}\n`;
     });
 
     res.set('Content-Type', 'audio/x-mpegurl');
     res.send(m3u);
 });
 
-// Stream Endpoint
-app.get('/stream/:channelNum', async (req, res) => {
-    const channelNum = req.params.channelNum;
+// Stream Endpoint for a SPECIFIC tuner
+app.get('/stream/:tunerName/:channelNum', async (req, res) => {
+    const { tunerName, channelNum } = req.params;
     const channel = CHANNELS.find(c => c.number === channelNum);
 
     if (!channel) {
         return res.status(404).send('Channel not found');
     }
 
-    // Acquire tuner with preemption
-    const tuner = await acquireTuner();
+    // Parse Tuner ID
+    const match = tunerName.match(/^tuner(\d+)$/);
+    if (!match) return res.status(400).send('Invalid tuner name');
+    const targetTunerId = parseInt(match[1]);
+
+    // Acquire the SPECIFIC tuner requested
+    const tuner = await acquireSpecificTuner(targetTunerId);
 
     if (!tuner) {
-        return res.status(503).send('No tuners available');
+        return res.status(503).send(`Tuner ${targetTunerId} is busy or unavailable`);
     }
 
     console.log(`Starting stream for ${channel.name} on Tuner ${tuner.id}`);
