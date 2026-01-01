@@ -233,7 +233,7 @@ app.get('/stream/:channelNum', async (req, res) => {
     });
 
     // Logging helpers
-    ffmpeg.stderr.on('data', (data) => console.log(`FFmpeg [Tuner ${tuner.id}]: ${data}`));
+    // ffmpeg.stderr.on('data', (data) => console.log(`FFmpeg [Tuner ${tuner.id}]: ${data}`));
     zap.stderr.on('data', (data) => console.log(`Zap [Tuner ${tuner.id}]: ${data}`));
 
     // Cleanup function
