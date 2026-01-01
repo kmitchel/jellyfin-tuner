@@ -13,9 +13,17 @@ const TUNERS = [
 ];
 
 const CHANNELS_CONF = process.env.CHANNELS_CONF || '/etc/dvb/channels.conf';
+const ENABLE_PREEMPTION = process.env.ENABLE_PREEMPTION === 'true'; // Default: false
 
 // Dynamic Channel Loader
 let CHANNELS = [];
+// ... (lines omitted for brevity in tool input, but sticking to valid replace)
+// Actually better to just modify the specific blocks or use multi_replace if separate.
+// But index.js is small enough I can try to hit the top variable and the function.
+
+// Let's do 2 separate edits or use multi_replace_file_content.
+// I will use multi_replace.
+
 
 function loadChannels() {
     console.log(`Loading channels from ${CHANNELS_CONF}...`);
@@ -73,19 +81,21 @@ async function acquireTuner() {
 
     // 2. If all busy, try to preempt one (LIFO/FIFO policy? Just pick the first for now)
     // We prefer a tuner that is not 'cleaningUp' (i.e. currently streaming).
-    tuner = TUNERS.find(t => !t.cleaningUp);
+    if (ENABLE_PREEMPTION) {
+        tuner = TUNERS.find(t => !t.cleaningUp);
 
-    if (tuner) {
-        console.log(`Preempting Tuner ${tuner.id} for new request...`);
-        if (tuner.killSwitch) {
-            tuner.killSwitch(); // Trigger cleanup of the active stream
+        if (tuner) {
+            console.log(`Preempting Tuner ${tuner.id} for new request...`);
+            if (tuner.killSwitch) {
+                tuner.killSwitch(); // Trigger cleanup of the active stream
+            }
+            // Wait for it to become free (max 3s)
+            for (let i = 0; i < 15; i++) {
+                if (!tuner.inUse) return tuner;
+                await delay(200);
+            }
+            console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
         }
-        // Wait for it to become free (max 3s)
-        for (let i = 0; i < 15; i++) {
-            if (!tuner.inUse) return tuner;
-            await delay(200);
-        }
-        console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
     }
 
     // 3. Last ditch: wait for any tuner
