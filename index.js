@@ -236,6 +236,8 @@ app.get('/stream/:tunerName/:channelNum', async (req, res) => {
     // -c copy : copy stream
     // -f mpegts : output format
     const ffmpegArgs = [
+        '-fflags', '+genpts+discardcorrupt',
+        '-err_detect', 'ignore_err',
         '-analyzeduration', '2000000',
         '-probesize', '2000000',
         '-i', 'pipe:0',
