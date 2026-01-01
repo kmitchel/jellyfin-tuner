@@ -87,56 +87,35 @@ async function acquireSpecificTuner(tunerId) {
     return null;
 }
 
-// Generate M3U Playlist for a specific tuner
-// Matches /tuner0.m3u, /tuner1.m3u
-app.get('/:tunerName.m3u', (req, res) => {
-    const tunerName = req.params.tunerName;
-
-    // Validate tuner name format "tunerX"
-    const match = tunerName.match(/^tuner(\d+)$/);
-    if (!match) {
-        return res.status(404).send('Invalid playlist request. Use /tuner0.m3u, /tuner1.m3u etc.');
-    }
-
-    const tunerId = parseInt(match[1]);
-    const tuner = TUNERS.find(t => t.id === tunerId);
-
-    if (!tuner) {
-        return res.status(404).send(`Tuner ${tunerId} not found`);
-    }
-
+// Generate M3U Playlist
+app.get('/lineup.m3u', (req, res) => {
     let m3u = '#EXTM3U\n';
     const host = req.headers.host;
 
     CHANNELS.forEach(channel => {
         m3u += `#EXTINF:-1 tvg-id="${channel.number}" tvg-name="${channel.name}",${channel.number} ${channel.name}\n`;
-        // Generates: http://host/stream/tuner0/45.1
-        m3u += `http://${host}/stream/${tunerName}/${channel.number}\n`;
+        m3u += `http://${host}/stream/${channel.number}\n`;
     });
 
     res.set('Content-Type', 'audio/x-mpegurl');
     res.send(m3u);
 });
 
-// Stream Endpoint for a SPECIFIC tuner
-app.get('/stream/:tunerName/:channelNum', async (req, res) => {
-    const { tunerName, channelNum } = req.params;
+// Stream Endpoint
+app.get('/stream/:channelNum', async (req, res) => {
+    const channelNum = req.params.channelNum;
     const channel = CHANNELS.find(c => c.number === channelNum);
 
     if (!channel) {
         return res.status(404).send('Channel not found');
     }
 
-    // Parse Tuner ID
-    const match = tunerName.match(/^tuner(\d+)$/);
-    if (!match) return res.status(400).send('Invalid tuner name');
-    const targetTunerId = parseInt(match[1]);
 
-    // Acquire the SPECIFIC tuner requested
-    const tuner = await acquireSpecificTuner(targetTunerId);
+    // Acquire any available tuner
+    const tuner = await acquireTuner();
 
     if (!tuner) {
-        return res.status(503).send(`Tuner ${targetTunerId} is busy or unavailable`);
+        return res.status(503).send('No tuners available');
     }
 
     console.log(`Acquired Tuner ${tuner.id} for ${channel.name}`);
