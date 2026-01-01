@@ -172,33 +172,37 @@ app.get('/stream/:channelNum', (req, res) => {
         if (tuner.cleaningUp) return;
         tuner.cleaningUp = true;
 
-        console.log(`Cleaning up Tuner ${tuner.id} (zap PID: ${zap.pid})`);
+        console.log(`Cleaning up Tuner ${tuner.id}`);
 
         // Kill processes
-        // Use SIGKILL for zap if it doesn't exit quickly to ensure lock release
         zap.kill('SIGTERM');
         ffmpeg.kill('SIGTERM');
 
         // Safety timeout to force release if processes hang
-        setTimeout(() => {
-            if (tuner.inUse) {
-                console.warn(`Force releasing Tuner ${tuner.id} after timeout`);
-                try { zap.kill('SIGKILL'); } catch (e) { }
-                try { ffmpeg.kill('SIGKILL'); } catch (e) { }
-                tuner.inUse = false;
-                tuner.cleaningUp = false;
-            }
+        const forceReleaseTimeout = setTimeout(() => {
+            console.warn(`Force releasing Tuner ${tuner.id} after timeout`);
+            try { zap.kill('SIGKILL'); } catch (e) { }
+            try { ffmpeg.kill('SIGKILL'); } catch (e) { }
+            // We'll let the exit handlers do the final state update if possible
         }, 2000);
+
+        // Allow one final clearing of timeout if zap exits cleanly before timeout
+        tuner.forceReleaseTimeout = forceReleaseTimeout;
     };
 
     // release tuner only when zap exits (lock released)
     zap.on('exit', (code, signal) => {
         console.log(`Zap exited [Tuner ${tuner.id}] (code: ${code}, signal: ${signal})`);
-        if (tuner.inUse) {
-            tuner.inUse = false;
-            tuner.cleaningUp = false;
-            console.log(`Tuner ${tuner.id} marked as FREE`);
+
+        if (tuner.forceReleaseTimeout) {
+            clearTimeout(tuner.forceReleaseTimeout);
+            tuner.forceReleaseTimeout = null;
         }
+
+        // Always mark free on zap exit, as the hardware lock is definitely gone
+        tuner.inUse = false;
+        tuner.cleaningUp = false;
+        console.log(`Tuner ${tuner.id} marked as FREE`);
     });
 
     ffmpeg.on('exit', (code) => {
