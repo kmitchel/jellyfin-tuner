@@ -12,6 +12,8 @@ const TUNERS = [
     { id: 1, adapter: '/dev/dvb/adapter1', inUse: false }
 ];
 
+const CHANNELS_CONF = process.env.CHANNELS_CONF || '/etc/dvb/channels.conf';
+
 // Mock Channel List - Replace with actual frequency data
 const CHANNELS = [
     { number: '45.1', name: 'WFWC-CD', serviceId: 1001 },
