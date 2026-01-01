@@ -169,27 +169,54 @@ app.get('/stream/:channelNum', (req, res) => {
 
     // Cleanup function
     const cleanup = () => {
-        console.log(`Cleaning up Tuner ${tuner.id}`);
-        if (!tuner.inUse) return; // Already cleaned up
+        if (tuner.cleaningUp) return;
+        tuner.cleaningUp = true;
 
-        tuner.inUse = false;
+        console.log(`Cleaning up Tuner ${tuner.id} (zap PID: ${zap.pid})`);
 
         // Kill processes
+        // Use SIGKILL for zap if it doesn't exit quickly to ensure lock release
         zap.kill('SIGTERM');
         ffmpeg.kill('SIGTERM');
+
+        // Safety timeout to force release if processes hang
+        setTimeout(() => {
+            if (tuner.inUse) {
+                console.warn(`Force releasing Tuner ${tuner.id} after timeout`);
+                try { zap.kill('SIGKILL'); } catch (e) { }
+                try { ffmpeg.kill('SIGKILL'); } catch (e) { }
+                tuner.inUse = false;
+                tuner.cleaningUp = false;
+            }
+        }, 2000);
     };
 
-    // Client disconnect
-    req.on('close', cleanup);
+    // release tuner only when zap exits (lock released)
+    zap.on('exit', (code, signal) => {
+        console.log(`Zap exited [Tuner ${tuner.id}] (code: ${code}, signal: ${signal})`);
+        if (tuner.inUse) {
+            tuner.inUse = false;
+            tuner.cleaningUp = false;
+            console.log(`Tuner ${tuner.id} marked as FREE`);
+        }
+    });
 
-    // Process exits
     ffmpeg.on('exit', (code) => {
-        console.log(`FFmpeg exited with code ${code}`);
+        console.log(`FFmpeg exited [Tuner ${tuner.id}] with code ${code}`);
+        // If ffmpeg dies, we must kill zap to stop tuning
         cleanup();
     });
-    zap.on('exit', (code) => {
-        console.log(`Zap exited with code ${code}`);
-        cleanup(); // If zap dies, stream is dead
+
+    // Client disconnect
+    req.on('close', () => {
+        console.log(`Client disconnected [Tuner ${tuner.id}]`);
+        cleanup();
+    });
+
+    // Handle zap errors
+    zap.on('error', (err) => {
+        console.error(`Tuner ${tuner.id} zap error:`, err);
+        cleanup();
     });
 });
 
