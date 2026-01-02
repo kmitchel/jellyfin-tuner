@@ -447,7 +447,7 @@ const EPG = {
 
                 // After title_length, there's a 16-bit descriptors_length
                 if (currentEventOffset + 2 <= section.length) {
-                    const descriptorsLength = ((section[currentEventOffset] & 0x0F) << 8) | section[currentEventOffset + 1];
+                    const descriptorsLength = ((section[currentEventOffset] & 0x0F) << 8) | section[currentEventOffset + 1]; // First 4 bits reserved
                     currentEventOffset += 2; // Move past descriptors_length field
                     if (currentEventOffset + descriptorsLength <= section.length) {
                         // Here you would parse descriptors for description if needed.
