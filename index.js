@@ -318,6 +318,7 @@ const EPG = {
 
         console.log(`[EPG] Beginning parse of ${buffer.length} bytes...`);
         const pidCounts = new Map();
+        const tableCounts = new Map();
 
         for (let i = 0; i < buffer.length - 188; i += 188) {
             if (buffer[i] !== 0x47) {
@@ -356,6 +357,12 @@ const EPG = {
 
                 const tableId = sectionStart[0];
 
+                // Verbose: Log every ATSC table found
+                if (tableId >= 0xC7 && tableId <= 0xCF) {
+                    // console.log(`[EPG Debug] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid}`);
+                    tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
+                }
+
                 // Debug log for first few table IDs found
                 if (programCount === 0 && sections.size < 5) {
                     console.log(`[EPG] Found Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid}`);
@@ -377,6 +384,10 @@ const EPG = {
         const sortedPids = Array.from(pidCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
         console.log('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
         console.log(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
+
+        const tableSummary = {};
+        tableCounts.forEach((v, k) => tableSummary[`0x${k.toString(16).toUpperCase()}`] = v);
+        console.log('[EPG] ATSC Tables found:', tableSummary);
 
         return programCount;
     },
@@ -439,6 +450,10 @@ const EPG = {
             // section[9] num_events_in_section
             const numEvents = section[9];
             let offset = 10; // Start of event loop
+
+            if (numEvents > 0) {
+                // console.log(`[ATSC EIT] Parsing ${numEvents} events for SourceID ${sourceId} / ServiceID ${serviceId} (Table 0x${section[0].toString(16)})`);
+            }
 
             for (let i = 0; i < numEvents; i++) {
                 // Check if enough bytes remain for event_id, start_time, duration, title_length
