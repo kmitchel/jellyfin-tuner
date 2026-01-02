@@ -26,6 +26,7 @@ db.serialize(() => {
 });
 
 const app = express();
+app.use(express.static('public'));
 const PORT = process.env.PORT || 3000;
 
 // Tuner Configuration
@@ -750,6 +751,27 @@ if (!dbExists) {
     console.log('[EPG] epg.db found. Skipping initial scan (will refresh in 15m).');
     EPG.isInitialScanDone = true;
 }
+
+app.get('/images', (req, res) => {
+    const imagesDir = path.resolve(__dirname, 'public', 'images');
+    if (!fs.existsSync(imagesDir)) return res.status(404).send('Images directory not found');
+
+    fs.readdir(imagesDir, (err, files) => {
+        if (err) return res.status(500).send('Error reading images directory');
+        let html = `<html><head><title>Hosted Images</title><style>
+            body { font-family: sans-serif; background: #0f172a; color: white; padding: 2rem; }
+            ul { list-style: none; padding: 0; }
+            li { margin: 0.5rem 0; }
+            a { color: #6366f1; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+        </style></head><body><h1>Hosted Images</h1><ul>`;
+        files.forEach(file => {
+            html += `<li><a href="/images/${file}">${file}</a></li>`;
+        });
+        html += '</ul><br><a href="/">Back to Dashboard</a></body></html>';
+        res.send(html);
+    });
+});
 
 // Generate M3U Playlist
 app.get('/lineup.m3u', (req, res) => {
