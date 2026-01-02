@@ -289,6 +289,9 @@ app.get('/stream/:channelNum', async (req, res) => {
         const inactivity = Date.now() - tuner.lastActivity;
         if (inactivity > 30000) { // 30s timeout
             console.warn(`[Tuner ${tuner.id}] Watchdog: Client stalled for ${Math.round(inactivity / 1000)}s - releasing.`);
+            // STOP THE WATCHDOG IMMEDIATELY to prevent spam
+            clearInterval(tuner.watchdogInterval);
+            tuner.watchdogInterval = null;
             cleanup();
         }
     }, 5000);
@@ -319,16 +322,16 @@ app.get('/stream/:channelNum', async (req, res) => {
 
     // Cleanup function
     const cleanup = () => {
-        if (tuner.cleaningUp) return;
-        tuner.cleaningUp = true;
-
-        console.log(`Cleaning up Tuner ${tuner.id}`);
-
-        // Clear Watchdog
+        // Always clear watchdog first to prevent infinite loops/spam
         if (tuner.watchdogInterval) {
             clearInterval(tuner.watchdogInterval);
             tuner.watchdogInterval = null;
         }
+
+        if (tuner.cleaningUp) return;
+        tuner.cleaningUp = true;
+
+        console.log(`Cleaning up Tuner ${tuner.id}`);
 
         // Remove the killSwitch reference so we don't call it again
         tuner.killSwitch = null;
