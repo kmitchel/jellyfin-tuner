@@ -460,6 +460,7 @@ const EPG = {
             // section[8] protocol_version
             // section[9] num_events_in_section
             const numEvents = section[9];
+            console.log(`[ATSC DEBUG] Header: SourceID=${sourceId}, NumEvents=${numEvents}, Len=${sectionLength}`);
             let offset = 10; // Start of event loop
 
             if (numEvents > 0) {
@@ -547,7 +548,7 @@ const EPG = {
                 offset = currentEventOffset; // Move to the start of the next event
             }
         } catch (e) {
-            console.error('[ATSC EPG] Error:', e);
+            console.error('[ATSC DEBUG] Error parsing EIT:', e);
         }
     },
     parseDVBEIT(section, serviceId, onFound) {
