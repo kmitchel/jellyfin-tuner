@@ -100,6 +100,7 @@ Group=jellyfin
 WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
+Environment=ENABLE_TRANSCODING=false
 
 # Access to DVB and GPU hardware
 SupplementaryGroups=video render

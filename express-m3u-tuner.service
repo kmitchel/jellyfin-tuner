@@ -10,6 +10,7 @@ WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
 # Environment variables can be added here if needed
+Environment=ENABLE_TRANSCODING=false
 # Environment=PORT=3000
 # Environment=ENABLE_QSV=true
 
