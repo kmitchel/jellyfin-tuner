@@ -274,13 +274,16 @@ const EPG = {
 
     parseEIT(buffer) {
         let programCount = 0;
-        // Minimal TS/EIT Parser
+        let sections = new Map(); // Track sections by PID and TableID to reassemble
+
+        console.log(`[EPG] Beginning parse of ${buffer.length} bytes...`);
+
         for (let i = 0; i < buffer.length - 188; i += 188) {
             if (buffer[i] !== 0x47) {
-                // Not sync, search next
                 let next = buffer.indexOf(0x47, i);
                 if (next === -1) break;
                 i = next;
+                if (i > buffer.length - 188) break;
             }
 
             const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2];
@@ -288,63 +291,98 @@ const EPG = {
 
             const pusi = buffer[i + 1] & 0x40;
             const adaptation = (buffer[i + 3] & 0x30) >> 4;
-            let offset = 4;
-            if (adaptation === 2 || adaptation === 3) offset += buffer[i + 4] + 1;
-            if (pusi) offset += buffer[i + offset] + 1;
+            let payloadOffset = 4;
+            if (adaptation === 2 || adaptation === 3) payloadOffset += buffer[i + 4] + 1;
 
-            const payload = buffer.slice(i + offset, i + 188);
-            if (payload.length < 12) continue;
+            if (payloadOffset >= 188) continue;
 
-            const tableId = payload[0];
-            if (tableId < 0x4E || tableId > 0x6F) continue; // EIT Table IDs
+            let payload = buffer.slice(i + payloadOffset, i + 188);
 
-            const serviceId = (payload[3] << 8) | payload[4];
+            // Handle PUSI (Start of a new section)
+            if (pusi) {
+                const pointer = payload[0];
+                const sectionStart = payload.slice(pointer + 1);
+                if (sectionStart.length < 3) continue;
 
-            // Loop through events
-            let evOffset = 15; // Start of events loop
-            const sectionLength = ((payload[1] & 0x0F) << 8) | payload[2];
+                const tableId = sectionStart[0];
+                if (tableId < 0x4E || tableId > 0x6F) continue;
 
-            while (evOffset < sectionLength - 4) {
-                const startTimeMJD = (payload[evOffset + 2] << 8) | payload[evOffset + 3];
-                const startTimeBCD = (payload[evOffset + 4] << 16) | (payload[evOffset + 5] << 8) | payload[evOffset + 6];
-                const durationBCD = (payload[evOffset + 7] << 16) | (payload[evOffset + 8] << 8) | payload[evOffset + 9];
-                const descriptorsLength = ((payload[evOffset + 10] & 0x0F) << 8) | payload[evOffset + 11];
+                const sectionLength = ((sectionStart[1] & 0x0F) << 8) | sectionStart[2];
+                const serviceId = (sectionStart[3] << 8) | sectionStart[4];
+
+                // We'll process what we have in this packet first
+                this.parseEITSection(sectionStart, serviceId, () => programCount++);
+            }
+        }
+        return programCount;
+    },
+
+    parseEITSection(section, serviceId, onFound) {
+        try {
+            const tableId = section[0];
+            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+            if (section.length < sectionLength + 3) return; // Incomplete section for now
+
+            // Skip header (8 bytes: table_id(1), syntax(1), len(2), id(2), reserved(1), sec_num(1), last_sec_num(1))
+            // Current EIT header is actually 14 bytes before event loop
+            // table_id(1), section_syntax(1), len(2), service_id(2), reserved(1), version(1), sec_num(1), last_sec_num(1), TSID(2), ONID(2) ...
+            let evOffset = 14;
+
+            while (evOffset < sectionLength - 1) { // -4 for CRC32
+                if (evOffset + 12 > section.length) break;
+
+                const eventId = (section[evOffset] << 8) | section[evOffset + 1];
+                const startTimeMJD = (section[evOffset + 2] << 8) | section[evOffset + 3];
+                const startTimeBCD = (section[evOffset + 4] << 16) | (section[evOffset + 5] << 8) | section[evOffset + 6];
+                const durationBCD = (section[evOffset + 7] << 16) | (section[evOffset + 8] << 8) | section[evOffset + 9];
+                const descriptorsLength = ((section[evOffset + 10] & 0x0F) << 8) | section[evOffset + 11];
+
+                if (evOffset + 12 + descriptorsLength > section.length) break;
 
                 const startTime = this.parseDVBTime(startTimeMJD, startTimeBCD);
-                const durationSec = (((durationBCD >> 16) & 0xFF) >> 4) * 36000 + ((durationBCD >> 16) & 0x0F) * 3600 +
-                    (((durationBCD >> 8) & 0xFF) >> 4) * 600 + ((durationBCD >> 8) & 0x0F) * 60 +
-                    ((durationBCD & 0xFF) >> 4) * 10 + (durationBCD & 0x0F);
+                const durationSec = (((durationBCD >> 16) & 0x0F) * 3600) + (((durationBCD >> 20) & 0x0F) * 36000) +
+                    (((durationBCD >> 8) & 0x0F) * 60) + (((durationBCD >> 12) & 0x0F) * 600) +
+                    ((durationBCD & 0x0F)) + (((durationBCD >> 4) & 0x0F) * 10);
 
                 const endTime = startTime + durationSec * 1000;
 
-                // Parse descriptors for title
                 let descOffset = evOffset + 12;
                 let title = '';
                 let desc = '';
 
                 while (descOffset < evOffset + 12 + descriptorsLength) {
-                    const tag = payload[descOffset];
-                    const len = payload[descOffset + 1];
+                    const tag = section[descOffset];
+                    const len = section[descOffset + 1];
+
                     if (tag === 0x4D) { // Short Event Descriptor
-                        const titleLen = payload[descOffset + 3];
-                        title = payload.slice(descOffset + 4, descOffset + 4 + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
-                        const descLen = payload[descOffset + 4 + titleLen];
-                        desc = payload.slice(descOffset + 5 + titleLen, descOffset + 5 + titleLen + descLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+                        // First byte of text usually indicates encoding. skip for simple latin.
+                        let titleLen = section[descOffset + 3];
+                        let titleStart = descOffset + 4;
+
+                        // Handle DVB character encoding (simple skip if first byte is < 0x20)
+                        if (section[titleStart] < 0x20) { titleStart++; titleLen--; }
+                        title = section.slice(titleStart, titleStart + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+
+                        let summaryLen = section[descOffset + 4 + section[descOffset + 3]];
+                        let summaryStart = descOffset + 5 + section[descOffset + 3];
+                        if (section[summaryStart] < 0x20) { summaryStart++; summaryLen--; }
+                        desc = section.slice(summaryStart, summaryStart + summaryLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
                     }
                     descOffset += 2 + len;
                 }
 
                 if (title && startTime > 0) {
-                    programCount++;
-                    console.log(`[EPG] Found: ${title} (Service: ${serviceId})`);
+                    onFound();
+                    console.log(`[EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
                     db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [serviceId.toString(), startTime, endTime, title, desc]);
                 }
 
                 evOffset += 12 + descriptorsLength;
             }
+        } catch (e) {
+            console.error('[EPG] Error parsing section:', e);
         }
-        return programCount;
     }
 };
 
