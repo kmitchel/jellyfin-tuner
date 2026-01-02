@@ -1,6 +1,7 @@
 const express = require('express');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const dbPath = 'epg.db';
 const dbExists = fs.existsSync(dbPath);
@@ -59,7 +60,7 @@ try {
     ];
 }
 
-const CHANNELS_CONF = process.env.CHANNELS_CONF || '/etc/dvb/channels.conf';
+const CHANNELS_CONF = process.env.CHANNELS_CONF || path.resolve(process.cwd(), 'channels.conf');
 const ENABLE_PREEMPTION = process.env.ENABLE_PREEMPTION === 'true'; // Default: false
 const ENABLE_TRANSCODING = process.env.ENABLE_TRANSCODING !== 'false'; // Default: true
 const ENABLE_QSV = process.env.ENABLE_QSV === 'true'; // Default: false
