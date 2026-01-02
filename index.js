@@ -218,16 +218,27 @@ function escapeXml(unsafe) {
 // Helper: Format date for XMLTV (Pure UTC for maximum compatibility)
 function formatXmltvDate(ts) {
     const d = new Date(ts);
-    const pad = (n) => n.toString().padStart(2, '0');
+    const pad = n => n < 10 ? '0' + n : n;
+    return d.getUTCFullYear() +
+        pad(d.getUTCMonth() + 1) +
+        pad(d.getUTCDate()) +
+        pad(d.getUTCHours()) +
+        pad(d.getUTCMinutes()) +
+        pad(d.getUTCSeconds()) +
+        ' +0000';
+}
 
-    const Y = d.getUTCFullYear();
-    const M = pad(d.getUTCMonth() + 1);
-    const D = pad(d.getUTCDate());
-    const h = pad(d.getUTCHours());
-    const m = pad(d.getUTCMinutes());
-    const s = pad(d.getUTCSeconds());
-
-    return `${Y}${M}${D}${h}${m}${s} +0000`;
+// Helper: Get latest logos from logos.json
+function getLatestLogos() {
+    try {
+        const logoPath = path.resolve(process.cwd(), 'logos.json');
+        if (fs.existsSync(logoPath)) {
+            return JSON.parse(fs.readFileSync(logoPath, 'utf8'));
+        }
+    } catch (e) {
+        console.warn('[Config] Failed to parse logos.json:', e);
+    }
+    return {};
 }
 
 // Helper: Acquire an available tuner, preempting if necessary
@@ -777,9 +788,11 @@ app.get('/images', (req, res) => {
 app.get('/lineup.m3u', (req, res) => {
     let m3u = '#EXTM3U\n';
     const host = req.headers.host;
+    const currentLogos = getLatestLogos();
 
     CHANNELS.forEach(channel => {
-        let logoAttr = channel.icon ? ` tvg-logo="${channel.icon}"` : "";
+        const icon = currentLogos[channel.number] || currentLogos[channel.name] || channel.icon;
+        let logoAttr = icon ? ` tvg-logo="${icon}"` : "";
         m3u += `#EXTINF:-1 tvg-id="${channel.number}" tvg-name="${channel.name}"${logoAttr},${channel.number} ${channel.name}\n`;
         m3u += `http://${host}/stream/${channel.number}\n`;
     });
@@ -797,14 +810,16 @@ app.get('/xmltv.xml', (req, res) => {
         }
         console.log(`[XMLTV] Serving ${rows.length} programs.`);
 
+        const currentLogos = getLatestLogos();
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<tv>\n';
 
         // Channels
         CHANNELS.forEach(c => {
+            const icon = currentLogos[c.number] || currentLogos[c.name] || c.icon;
             xml += `  <channel id="${c.number}">\n`;
             xml += `    <display-name>${escapeXml(c.name)}</display-name>\n`;
-            if (c.icon) xml += `    <icon src="${escapeXml(c.icon)}" />\n`;
+            if (icon) xml += `    <icon src="${escapeXml(icon)}" />\n`;
             xml += '  </channel>\n';
         });
 
