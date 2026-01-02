@@ -16,8 +16,13 @@ db.serialize(() => {
         end_time INTEGER,
         title TEXT,
         description TEXT,
+        event_id INTEGER,
+        source_id INTEGER,
         UNIQUE(channel_service_id, start_time)
     )`);
+    // Graceful migrations for existing DBs
+    db.run("ALTER TABLE programs ADD COLUMN event_id INTEGER", () => { });
+    db.run("ALTER TABLE programs ADD COLUMN source_id INTEGER", () => { });
 });
 
 const app = express();
@@ -469,10 +474,13 @@ const EPG = {
         const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
         if (section.length < sectionLength + 3) return;
 
-        if (tableId === 0xCB || tableId === 0xCC || tableId === 0xCD || tableId === 0xCE) {
-            // In ATSC EIT, 'id' is SourceId. We need to map it to ServiceId (Program Number).
+        if (tableId === 0xCB) {
+            // EIT (Event Information Table)
             let serviceId = this.sourceMap.get(id) || id.toString();
-            this.parseATSCEIT(section, serviceId, onFound);
+            this.parseATSCEIT(section, serviceId, onFound, id);
+        } else if (tableId === 0xCC) {
+            // ETT (Extended Text Table)
+            this.parseATSCEET(section, id);
         } else if (tableId >= 0x4E && tableId <= 0x6F) {
             this.parseDVBEIT(section, id, onFound);
         }
@@ -517,7 +525,7 @@ const EPG = {
         }
     },
 
-    parseATSCEIT(section, sourceId, onFound) {
+    parseATSCEIT(section, virtualChannel, onFound, sourceId) {
         try {
             const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
             // ATSC EIT header is 10 bytes (table_id to num_events_in_section)
@@ -600,9 +608,11 @@ const EPG = {
 
                 if (title && startTime > 0) {
                     onFound();
-                    const virtualChannel = this.sourceMap.get(sourceId) || sourceId.toString();
-                    db.run("INSERT OR REPLACE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                        [virtualChannel, startTime, endTime, title, description]);
+                    db.run(`INSERT INTO programs (channel_service_id, start_time, end_time, title, description, event_id, source_id) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(channel_service_id, start_time) 
+                            DO UPDATE SET title=excluded.title, end_time=excluded.end_time, event_id=excluded.event_id, source_id=excluded.source_id`,
+                        [virtualChannel, startTime, endTime, title, description, eventId, sourceId]);
                 } else {
                     debugLog(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
                 }
@@ -611,6 +621,38 @@ const EPG = {
             }
         } catch (e) {
             console.error('[ATSC DEBUG] Error parsing EIT:', e);
+        }
+    },
+
+    parseATSCEET(section, sourceId) {
+        try {
+            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+            if (section.length < 13) return;
+
+            const etmId = section.readUInt32BE(9);
+            const eventId = (etmId >> 2) & 0x3FFF;
+
+            let desc = '';
+            // MSS starts at offset 13 
+            const mssBuffer = section.slice(13, sectionLength + 3 - 4);
+            if (mssBuffer.length > 5) {
+                const numStrings = mssBuffer[0];
+                if (numStrings > 0) {
+                    const stringLen = mssBuffer[7]; // num_strings(1) + lang(3) + num_segs(1) + comp(1) + mode(1) + len(1) = 8th byte
+                    if (mssBuffer.length >= 8 + stringLen) {
+                        desc = mssBuffer.slice(8, 8 + stringLen).toString('utf8');
+                        desc = desc.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
+                    }
+                }
+            }
+
+            if (desc) {
+                debugLog(`[ATSC ETT] Decoded Desc for Event ${eventId}: "${desc.substring(0, 40)}..."`);
+                db.run("UPDATE programs SET description = ? WHERE source_id = ? AND event_id = ? AND (description IS NULL OR description = '')",
+                    [desc, sourceId, eventId]);
+            }
+        } catch (e) {
+            console.error('[ATSC ETT] Error:', e);
         }
     },
     parseDVBEIT(section, serviceId, onFound) {
