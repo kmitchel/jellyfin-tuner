@@ -323,8 +323,9 @@ const EPG = {
                 if (sectionStart.length < 3) continue;
 
                 const tableId = sectionStart[0];
-                // Support DVB EIT (0x4E-0x6F) and ATSC EIT (0xCB)
-                if ((tableId >= 0x4E && tableId <= 0x6F) || tableId === 0xCB) {
+                // Support DVB EIT (0x4E-0x6F) and ATSC PSIP Tables (0xC7-0xCF)
+                // 0xC7: MGT, 0xC8: VCT, 0xCB: EIT-0, 0xCC: EIT-1...
+                if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
                     const serviceId = (sectionStart[3] << 8) | sectionStart[4];
                     this.parseEITSection(sectionStart, serviceId, () => programCount++);
                 }
@@ -334,24 +335,117 @@ const EPG = {
     },
 
     parseEITSection(section, serviceId, onFound) {
-        try {
-            const tableId = section[0];
-            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-            if (section.length < sectionLength + 3) return;
+        const tableId = section[0];
+        const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+        if (section.length < sectionLength + 3) return;
 
-            // DVB EIT has 14 byte header. ATSC EIT has 9 byte header.
-            let evOffset = (tableId === 0xCB) ? 9 : 14;
+        if (tableId === 0xCB || tableId === 0xCC || tableId === 0xCD || tableId === 0xCE) {
+            this.parseATSCEIT(section, serviceId, onFound);
+        } else if (tableId >= 0x4E && tableId <= 0x6F) {
+            this.parseDVBEIT(section, serviceId, onFound);
+        }
+    },
+
+    parseATSCEIT(section, sourceId, onFound) {
+        try {
+            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+            // ATSC EIT header is 10 bytes (table_id to num_events_in_section)
+            // section[0] table_id
+            // section[1-2] section_length
+            // section[3-4] source_id
+            // section[5] version_number, current_next_indicator
+            // section[6] section_number
+            // section[7] last_section_number
+            // section[8] protocol_version
+            // section[9] num_events_in_section
+            const numEvents = section[9];
+            let offset = 10; // Start of event loop
+
+            for (let i = 0; i < numEvents; i++) {
+                // Check if enough bytes remain for event_id, start_time, duration, title_length
+                if (offset + 10 > sectionLength + 3) break; // 10 bytes for event_id (2), start_time (4), length_in_seconds (3), title_length (1)
+
+                const eventId = (section[offset] << 8) | section[offset + 1];
+                // ATSC start_time: seconds since Jan 6, 1980 00:00:00 UTC
+                const startTimeGPS = (section[offset + 2] << 24) | (section[offset + 3] << 16) | (section[offset + 4] << 8) | section[offset + 5];
+                // length_in_seconds is 22 bits, ETM_location is 2 bits.
+                const duration = ((section[offset + 6] & 0x3F) << 16) | (section[offset + 7] << 8) | section[offset + 8]; // Mask out ETM_location
+                const titleLength = section[offset + 9];
+
+                // GPS Epoch 1980-01-06 00:00:00 UTC. Unix Epoch 1970-01-01 00:00:00 UTC.
+                // Difference is 315964800 seconds.
+                const startTime = (startTimeGPS + 315964800) * 1000;
+                const endTime = startTime + duration * 1000;
+
+                let title = '';
+                let description = '';
+                let currentEventOffset = offset + 10; // After title_length
+
+                // Parse title (Multi-String Structure)
+                if (titleLength > 0 && currentEventOffset + titleLength <= section.length) {
+                    // For simplicity, we'll extract the first string from the MSS.
+                    // MSS format: num_strings (1 byte), then for each string: ISO_639_language_code (3 bytes), number_of_bytes_in_string (1 byte), string_text (variable)
+                    let titleBuffer = section.slice(currentEventOffset, currentEventOffset + titleLength);
+                    if (titleBuffer.length > 0) {
+                        const numStrings = titleBuffer[0];
+                        let stringOffset = 1;
+                        if (numStrings > 0 && titleBuffer.length >= stringOffset + 4) { // At least one string header (lang + len)
+                            // const langCode = titleBuffer.slice(stringOffset, stringOffset + 3).toString('ascii');
+                            const stringLen = titleBuffer[stringOffset + 3];
+                            if (titleBuffer.length >= stringOffset + 4 + stringLen) {
+                                title = titleBuffer.slice(stringOffset + 4, stringOffset + 4 + stringLen).toString('utf8').trim();
+                            }
+                        }
+                    }
+                }
+                currentEventOffset += titleLength;
+
+                // Descriptors loop (for ETM or other event descriptors)
+                // The ATSC EIT event structure has a 16-bit descriptors_length field after the title_text.
+                // The provided snippet has `descLength` which seems to be for ETM.
+                // Let's assume for now that `descLength` in the snippet refers to the total length of event descriptors.
+                // The actual ATSC EIT structure has `descriptors_length` (16 bits) after `title_text`.
+                // For simplicity, we'll skip parsing full descriptors for now and just advance the offset.
+                // If ETM is present, it's usually indicated by ETM_location bits and then an ETM_id.
+                // The provided snippet's `descLength` calculation is not standard ATSC EIT.
+                // Let's use the standard `descriptors_length` field.
+
+                // After title_length, there's a 16-bit descriptors_length
+                if (currentEventOffset + 2 <= section.length) {
+                    const descriptorsLength = ((section[currentEventOffset] & 0x0F) << 8) | section[currentEventOffset + 1];
+                    currentEventOffset += 2; // Move past descriptors_length field
+                    if (currentEventOffset + descriptorsLength <= section.length) {
+                        // Here you would parse descriptors for description if needed.
+                        // For now, we just advance the offset.
+                        currentEventOffset += descriptorsLength;
+                    }
+                }
+
+                if (title && startTime > 0) {
+                    onFound();
+                    console.log(`[ATSC EPG] Parsed: "${title}" for Source ID: ${sourceId}`);
+                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                        [sourceId.toString(), startTime, endTime, title, description]); // Description is empty for now
+                }
+
+                offset = currentEventOffset; // Move to the start of the next event
+            }
+        } catch (e) {
+            console.error('[ATSC EPG] Error:', e);
+        }
+    },
+
+    parseDVBEIT(section, serviceId, onFound) {
+        try {
+            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+            let evOffset = 14;
 
             while (evOffset < sectionLength - 1) {
                 if (evOffset + 12 > section.length) break;
 
-                // ATSC and DVB both use similar MJD/BCD for time in EIT, 
-                // but ATSC allows different descriptors.
                 const startTimeMJD = (section[evOffset + 2] << 8) | section[evOffset + 3];
                 const startTimeBCD = (section[evOffset + 4] << 16) | (section[evOffset + 5] << 8) | section[evOffset + 6];
                 const durationBCD = (section[evOffset + 7] << 16) | (section[evOffset + 8] << 8) | section[evOffset + 9];
-
-                // For ATSC (0xCB), the descriptor length is at offset 10-11
                 const descriptorsLength = ((section[evOffset + 10] & 0x0F) << 8) | section[evOffset + 11];
 
                 if (evOffset + 12 + descriptorsLength > section.length) break;
@@ -371,19 +465,36 @@ const EPG = {
                     const tag = section[descOffset];
                     const len = section[descOffset + 1];
 
-                    // 0x4D is DVB Title. 0x80/0x81/0xAD are common ATSC Title/Desc descriptors
-                    if (tag === 0x4D || tag === 0x80 || tag === 0xAD) {
+                    if (tag === 0x4D) { // DVB Short Event Descriptor (Title)
                         let titleLen = section[descOffset + 3];
                         let titleStart = descOffset + 4;
+                        // Handle potential leading compression_type or mode_byte
                         if (section[titleStart] < 0x20) { titleStart++; titleLen--; }
                         title = section.slice(titleStart, titleStart + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+                    } else if (tag === 0x4E) { // DVB Extended Event Descriptor (Description)
+                        // For simplicity, just grab the first description text
+                        if (!desc) {
+                            let textOffset = descOffset + 2;
+                            // Skip descriptor_number, last_descriptor_number, language_code, length_of_items, items
+                            // and get to length_of_text and text_char
+                            // This is a simplified parse, a full parse would iterate through items
+                            if (textOffset + 3 < descOffset + 2 + len) { // Check for language code
+                                textOffset += 3; // Skip language_code
+                                // Skip length_of_items and items loop for now
+                                // Just try to find the text part
+                                let remainingLen = (descOffset + 2 + len) - textOffset;
+                                if (remainingLen > 0) {
+                                    desc = section.slice(textOffset, textOffset + remainingLen).toString('utf8').trim();
+                                }
+                            }
+                        }
                     }
                     descOffset += 2 + len;
                 }
 
                 if (title && startTime > 0) {
                     onFound();
-                    console.log(`[EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
+                    console.log(`[DVB EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
                     db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [serviceId.toString(), startTime, endTime, title, desc]);
                 }
@@ -391,7 +502,7 @@ const EPG = {
                 evOffset += 12 + descriptorsLength;
             }
         } catch (e) {
-            console.error('[EPG] Error parsing section:', e);
+            console.error('[DVB EPG] Error:', e);
         }
     }
 };
