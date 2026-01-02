@@ -256,22 +256,24 @@ const EPG = {
 
             zap.stdout.on('data', (data) => {
                 buffer = Buffer.concat([buffer, data]);
-                if (buffer.length > 5 * 1024 * 1024) { // 5MB should be plenty for EPG
+                if (buffer.length > 15 * 1024 * 1024) { // 15MB buffer
                     zap.kill('SIGKILL');
                 }
             });
 
-            const timeout = setTimeout(() => zap.kill('SIGKILL'), 20000); // 20s per mux
+            const timeout = setTimeout(() => zap.kill('SIGKILL'), 90000); // 90s per mux (broadcast EPG can be slow)
 
             zap.on('exit', () => {
                 clearTimeout(timeout);
-                this.parseEIT(buffer);
+                const count = this.parseEIT(buffer);
+                console.log(`[EPG] Mux scan finished. Discovered ${count} program entries.`);
                 resolve();
             });
         });
     },
 
     parseEIT(buffer) {
+        let programCount = 0;
         // Minimal TS/EIT Parser
         for (let i = 0; i < buffer.length - 188; i += 188) {
             if (buffer[i] !== 0x47) {
@@ -333,6 +335,7 @@ const EPG = {
                 }
 
                 if (title && startTime > 0) {
+                    programCount++;
                     db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [serviceId.toString(), startTime, endTime, title, desc]);
                 }
@@ -340,6 +343,7 @@ const EPG = {
                 evOffset += 12 + descriptorsLength;
             }
         }
+        return programCount;
     }
 };
 
