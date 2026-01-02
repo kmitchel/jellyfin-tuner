@@ -8,7 +8,7 @@ A high-performance ExpressJS server for turning your USB DVB/ATSC tuners into a 
 - **EPG Engine**: Built-in parser for ATSC (EIT/VCT) and DVB program guides.
 - **Smart Mapping**: Automatically maps ATSC Source IDs to Virtual Channel numbers (e.g., 55.1).
 - **XMLTV Excellence**: Generates standard XMLTV files with local timezone support and proper entity escaping (no more "Rizzoli & Isles" ampersand crashes).
-- **Auto-Disambiguation**: Automatically fixes duplicate channel names in your `channels.conf` by appending subchannel numbers.
+- **Smart Disambiguation**: Tunes using Virtual Channel numbers instead of section names, allowing multiple channels with the same name (e.g., "Bounce") to coexist without conflict.
 - **Hardware Acceleration**: Support for Intel QSV hardware transcoding to reduce CPU load.
 - **Smart Scanning**: Only runs a full EPG scan on startup if the database is missing; otherwise refreshes every 15 minutes.
 - **Round-Robin Preemption**: Distributes tuner load and supports preemption logic.
@@ -61,7 +61,7 @@ sudo apt install v4l-utils ffmpeg nodejs npm sqlite3
    ```json
    {
      "15.1": "https://example.com/abc-logo.png",
-     "Bounce 55.2": "https://example.com/bounce.png"
+     "55.2": "https://example.com/bounce.png"
    }
    ```
    The app will automatically include these in the M3U (`tvg-logo`) and XMLTV (`<icon src="..." />`) outputs.
@@ -154,7 +154,7 @@ EPG data is stored in `epg.db`. The application enforces a strict uniqueness con
 The parser handles Multi-String Structure (MSS) titles and correctly handles GPS-to-Unix epoch conversions, including duration bitmask fixes for North American broadcasts.
 
 ### Channel Disambiguation
-If your `channels.conf` has multiple sections named `[Bounce]`, the app will automatically rename them to `[Bounce 55.1]`, `[Bounce 55.2]`, etc., and save the changes back to the file to ensure reliable tuning.
+The application uses the `VCHANNEL` number for tuning via `dvbv5-zap` instead of the section name. This means that if your `channels.conf` has multiple sections named `[Bounce]`, they will all stay as-is, and the app will reliably choose the correct one based on its unique subchannel number (e.g., 55.1 vs 55.2).
 
 ## 🔧 Troubleshooting
 
@@ -185,7 +185,7 @@ If you update your `channels.conf` or notice your guide is stale/incorrect in Je
 
 ### ⚠️ Known Issues
 
-- **EPG Virtual Channel Mismatch**: In some broadcast environments, EPG data may occasionally display on the wrong subchannel (e.g., 15.3 program data appearing on 15.1). This is typically caused by inconsistencies in the broadcaster's metadata (Source ID/Service ID mapping) or overlapping signals from different transmitters.
+- **[SOLVED] EPG Virtual Channel Mismatch**: Previously, EPG data could occasionally display on the wrong subchannel. This was resolved by switching to virtual channel numbers for disambiguation and tuning, ensuring EPG data is correctly mapped and retrieved based on reliable channel identifiers.
 - **Chromecast Connectivity**: Some users have reported that the Jellyfin Android/Chromecast application may repeatedly close its connection and restart the stream. This behavior appears unique to the Chromecast environment and may relate to how it handles the underlying MPEG-TS stream timing.
 
 ## 📄 License
