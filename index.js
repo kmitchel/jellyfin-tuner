@@ -337,18 +337,24 @@ app.get('/stream/:channelNum', async (req, res) => {
         tuner.killSwitch = null;
 
         // Kill processes
-        if (tuner.processes.zap) tuner.processes.zap.kill('SIGTERM');
-        if (tuner.processes.ffmpeg) tuner.processes.ffmpeg.kill('SIGTERM');
+        if (tuner.processes.zap) {
+            try { process.kill(tuner.processes.zap.pid, 'SIGKILL'); } catch (e) { }
+        }
+        if (tuner.processes.ffmpeg) {
+            try { process.kill(tuner.processes.ffmpeg.pid, 'SIGKILL'); } catch (e) { }
+        }
 
-        // Safety timeout to force release if processes hang
+        // Safety timeout to force release state if exit handler doesn't fire
         const forceReleaseTimeout = setTimeout(() => {
-            console.warn(`Force releasing Tuner ${tuner.id} after timeout`);
-            if (tuner.processes.zap) try { tuner.processes.zap.kill('SIGKILL'); } catch (e) { }
-            if (tuner.processes.ffmpeg) try { tuner.processes.ffmpeg.kill('SIGKILL'); } catch (e) { }
-        }, 2000);
+            console.warn(`Force releasing Tuner ${tuner.id} state (cleanup timeout)`);
+            tuner.inUse = false;
+            tuner.cleaningUp = false;
+            tuner.processes = {};
+        }, 1000);
 
         // Allow one final clearing of timeout if zap exits cleanly before timeout
         tuner.forceReleaseTimeout = forceReleaseTimeout;
+
     };
 
     // Attach killSwitch for preemption
