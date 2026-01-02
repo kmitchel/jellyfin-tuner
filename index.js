@@ -588,33 +588,36 @@ const EPG = {
 
                 if (sourceId) {
                     const mapKey = `${freq}_${sourceId}`;
-                    // ATSC A/65: major (10 bits), minor (10 bits)
-                    // Byte 14: RR MMMMMM (res, major high 6)
-                    // Byte 15: MMMM mmmm (major low 4, minor high 4)
-                    // Byte 16: mmmmmm SS (minor low 6, service_type high 2?) 
-                    // Note: modulation_mode is actually Byte 17 according to some specs
-                    const major = ((section[offset + 14] & 0x3F) << 4) | (section[offset + 15] >> 4);
-                    const minor = ((section[offset + 15] & 0x0F) << 6) | (section[offset + 16] >> 2);
+                    // ATSC A/65 Table 6.7: 10-bit major, 10-bit minor
+                    // Byte 14: reserved(4), major(4 high)
+                    // Byte 15: major(6 low), minor(2 high)
+                    // Byte 16: minor(8 low)
+                    const major = ((section[offset + 14] & 0x0F) << 6) | (section[offset + 15] >> 2);
+                    const minor = ((section[offset + 15] & 0x03) << 8) | section[offset + 16];
                     const virtualChannel = `${major}.${minor}`;
 
-                    // High Precision Mapping: Try to find by Virtual Channel number first
-                    // This fixes serviceId swaps where 15.1 and 15.3 might have crossed wires
-                    let channel = CHANNELS.find(c => c.number === virtualChannel);
+                    // Match logic:
+                    // 1. Exact match for Frequency AND ServiceID (Most reliable for a specific mux)
+                    let channel = CHANNELS.find(c => c.frequency == freq && c.serviceId == programNumber.toString());
 
+                    // 2. Fallback: Match by Virtual Channel Number + Frequency
                     if (!channel) {
-                        // Fallback: Find matching channel in our config by freq and programNumber
-                        channel = CHANNELS.find(c => c.frequency == freq && c.serviceId == programNumber.toString());
+                        channel = CHANNELS.find(c => c.frequency == freq && c.number === virtualChannel);
+                    }
+
+                    // 3. Last Resort: Global Virtual Channel match
+                    if (!channel) {
+                        channel = CHANNELS.find(c => c.number === virtualChannel);
                     }
 
                     if (channel) {
                         if (this.sourceMap.get(mapKey) !== channel.number) {
-                            debugLog(`[ATSC VCT] Verified Map: ${freq} - Source ${sourceId} -> ${channel.name} (${channel.number})`);
+                            debugLog(`[ATSC VCT] Map: ${freq} Source ${sourceId} -> ${channel.name} (${channel.number}) [Actual VC: ${virtualChannel}]`);
                             this.sourceMap.set(mapKey, channel.number);
                         }
                     } else {
-                        // Dynamic Map: No local config match, use broadcast metadata
                         if (!this.sourceMap.has(mapKey)) {
-                            debugLog(`[ATSC VCT] Dynamic Map: ${freq} - Source ${sourceId} -> ${virtualChannel}`);
+                            debugLog(`[ATSC VCT] Unconfigured: ${freq} Source ${sourceId} -> ${virtualChannel}`);
                             this.sourceMap.set(mapKey, virtualChannel);
                         }
                     }
