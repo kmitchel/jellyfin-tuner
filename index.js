@@ -256,23 +256,30 @@ const EPG = {
         return new Promise((resolve) => {
             const zap = spawn('dvbv5-zap', [
                 '-c', CHANNELS_CONF,
-                '-r',
+                '-r', // Capture all PIDs (required for ATSC dynamic EIT)
                 '-a', tuner.id,
-                '-P', '18', // Only EIT PID
                 '-o', '-',
                 channelName
             ]);
 
             let buffer = Buffer.alloc(0);
+            let dataReceived = false;
 
             zap.stdout.on('data', (data) => {
+                if (!dataReceived) {
+                    console.log(`[EPG] Receiving data stream for ${channelName}...`);
+                    dataReceived = true;
+                }
                 buffer = Buffer.concat([buffer, data]);
-                if (buffer.length > 15 * 1024 * 1024) { // 15MB buffer
+                if (buffer.length > 30 * 1024 * 1024) { // 30MB limit for full mux scan
                     zap.kill('SIGKILL');
                 }
             });
 
-            const timeout = setTimeout(() => zap.kill('SIGKILL'), 90000); // 90s per mux (broadcast EPG can be slow)
+            const timeout = setTimeout(() => {
+                if (!dataReceived) console.warn(`[EPG] No data received for ${channelName} after 15s. Signal might be weak.`);
+                zap.kill('SIGKILL');
+            }, 60000); // 60s per mux (ATSC can be slow)
 
             zap.on('exit', () => {
                 clearTimeout(timeout);
@@ -316,13 +323,11 @@ const EPG = {
                 if (sectionStart.length < 3) continue;
 
                 const tableId = sectionStart[0];
-                if (tableId < 0x4E || tableId > 0x6F) continue;
-
-                const sectionLength = ((sectionStart[1] & 0x0F) << 8) | sectionStart[2];
-                const serviceId = (sectionStart[3] << 8) | sectionStart[4];
-
-                // We'll process what we have in this packet first
-                this.parseEITSection(sectionStart, serviceId, () => programCount++);
+                // Support DVB EIT (0x4E-0x6F) and ATSC EIT (0xCB)
+                if ((tableId >= 0x4E && tableId <= 0x6F) || tableId === 0xCB) {
+                    const serviceId = (sectionStart[3] << 8) | sectionStart[4];
+                    this.parseEITSection(sectionStart, serviceId, () => programCount++);
+                }
             }
         }
         return programCount;
@@ -332,20 +337,21 @@ const EPG = {
         try {
             const tableId = section[0];
             const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-            if (section.length < sectionLength + 3) return; // Incomplete section for now
+            if (section.length < sectionLength + 3) return;
 
-            // Skip header (8 bytes: table_id(1), syntax(1), len(2), id(2), reserved(1), sec_num(1), last_sec_num(1))
-            // Current EIT header is actually 14 bytes before event loop
-            // table_id(1), section_syntax(1), len(2), service_id(2), reserved(1), version(1), sec_num(1), last_sec_num(1), TSID(2), ONID(2) ...
-            let evOffset = 14;
+            // DVB EIT has 14 byte header. ATSC EIT has 9 byte header.
+            let evOffset = (tableId === 0xCB) ? 9 : 14;
 
-            while (evOffset < sectionLength - 1) { // -4 for CRC32
+            while (evOffset < sectionLength - 1) {
                 if (evOffset + 12 > section.length) break;
 
-                const eventId = (section[evOffset] << 8) | section[evOffset + 1];
+                // ATSC and DVB both use similar MJD/BCD for time in EIT, 
+                // but ATSC allows different descriptors.
                 const startTimeMJD = (section[evOffset + 2] << 8) | section[evOffset + 3];
                 const startTimeBCD = (section[evOffset + 4] << 16) | (section[evOffset + 5] << 8) | section[evOffset + 6];
                 const durationBCD = (section[evOffset + 7] << 16) | (section[evOffset + 8] << 8) | section[evOffset + 9];
+
+                // For ATSC (0xCB), the descriptor length is at offset 10-11
                 const descriptorsLength = ((section[evOffset + 10] & 0x0F) << 8) | section[evOffset + 11];
 
                 if (evOffset + 12 + descriptorsLength > section.length) break;
@@ -365,19 +371,12 @@ const EPG = {
                     const tag = section[descOffset];
                     const len = section[descOffset + 1];
 
-                    if (tag === 0x4D) { // Short Event Descriptor
-                        // First byte of text usually indicates encoding. skip for simple latin.
+                    // 0x4D is DVB Title. 0x80/0x81/0xAD are common ATSC Title/Desc descriptors
+                    if (tag === 0x4D || tag === 0x80 || tag === 0xAD) {
                         let titleLen = section[descOffset + 3];
                         let titleStart = descOffset + 4;
-
-                        // Handle DVB character encoding (simple skip if first byte is < 0x20)
                         if (section[titleStart] < 0x20) { titleStart++; titleLen--; }
                         title = section.slice(titleStart, titleStart + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
-
-                        let summaryLen = section[descOffset + 4 + section[descOffset + 3]];
-                        let summaryStart = descOffset + 5 + section[descOffset + 3];
-                        if (section[summaryStart] < 0x20) { summaryStart++; summaryLen--; }
-                        desc = section.slice(summaryStart, summaryStart + summaryLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
                     }
                     descOffset += 2 + len;
                 }
