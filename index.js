@@ -381,263 +381,262 @@ const EPG = {
                     }
                 }
             }
-        }
 
-        // Detailed summary sorted by packet count
-        const sortedPids = Array.from(pidCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
-        console.log('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
-        console.log(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
+            // Detailed summary sorted by packet count
+            const sortedPids = Array.from(pidCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            console.log('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
+            console.log(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
 
-        const tableSummary = {};
-        tableCounts.forEach((v, k) => tableSummary[`0x${k.toString(16).toUpperCase()}`] = v);
-        console.log('[EPG] ATSC Tables found:', tableSummary);
+            const tableSummary = {};
+            tableCounts.forEach((v, k) => tableSummary[`0x${k.toString(16).toUpperCase()}`] = v);
+            console.log('[EPG] ATSC Tables found:', tableSummary);
 
-        return programCount;
-    },
+            return programCount;
+        },
 
-    handleCompleteSection(section, pid, programCountRef, tableCounts, sections) {
-        const tableId = section[0];
+        handleCompleteSection(section, pid, programCountRef, tableCounts, sections) {
+            const tableId = section[0];
 
-        // Log ATSC tables
-        if (tableId >= 0xC7 && tableId <= 0xCF) {
-            // console.log(`[EPG Verbose] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid} (Len: ${section.length})`);
-            tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
-        }
+            // Log ATSC tables
+            if (tableId >= 0xC7 && tableId <= 0xCF) {
+                // console.log(`[EPG Verbose] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid} (Len: ${section.length})`);
+                tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
+            }
 
-        if (tableId === 0xC8 || tableId === 0xC9) {
-            this.parseATSCVCT(section);
-        } else if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
-            const id = (section[3] << 8) | section[4];
-            this.parseEITSection(section, id, () => { });
-            // Note: programCount is not incremented here but parseEIT returns it? 
-            // We'll rely on DB inserts or just accept 0 return for now (display only).
-        }
-    },
+            if (tableId === 0xC8 || tableId === 0xC9) {
+                this.parseATSCVCT(section);
+            } else if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
+                const id = (section[3] << 8) | section[4];
+                this.parseEITSection(section, id, () => { });
+                // Note: programCount is not incremented here but parseEIT returns it? 
+                // We'll rely on DB inserts or just accept 0 return for now (display only).
+            }
+        },
 
-    parseEITSection(section, id, onFound) {
-        const tableId = section[0];
-        const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-        if (section.length < sectionLength + 3) return;
-
-        if (tableId === 0xCB || tableId === 0xCC || tableId === 0xCD || tableId === 0xCE) {
-            // In ATSC EIT, 'id' is SourceId. We need to map it to ServiceId (Program Number).
-            let serviceId = this.sourceMap.get(id) || id.toString();
-            this.parseATSCEIT(section, serviceId, onFound);
-        } else if (tableId >= 0x4E && tableId <= 0x6F) {
-            this.parseDVBEIT(section, id, onFound);
-        }
-    },
-
-    parseATSCVCT(section) {
-        try {
+        parseEITSection(section, id, onFound) {
+            const tableId = section[0];
             const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-            const numChannels = section[9];
-            let offset = 10;
+            if (section.length < sectionLength + 3) return;
 
-            for (let i = 0; i < numChannels; i++) {
-                if (offset + 32 > sectionLength + 3) {
-                    console.log(`[ATSC VCT] Section too short for channel at index ${i}`);
-                    break;
-                }
-                // Channel name is 14 bytes (UTF-16)
-                // Bytes 14-15: Major Channel
-                const major = ((section[offset + 14] & 0x0F) << 6) | (section[offset + 15] >> 2);
-                const minor = ((section[offset + 15] & 0x03) << 8) | section[offset + 16];
+            if (tableId === 0xCB || tableId === 0xCC || tableId === 0xCD || tableId === 0xCE) {
+                // In ATSC EIT, 'id' is SourceId. We need to map it to ServiceId (Program Number).
+                let serviceId = this.sourceMap.get(id) || id.toString();
+                this.parseATSCEIT(section, serviceId, onFound);
+            } else if (tableId >= 0x4E && tableId <= 0x6F) {
+                this.parseDVBEIT(section, id, onFound);
+            }
+        },
 
-                // Bytes 18-21: Carrier Freq
-                // Bytes 22-23: Channel TSID
-                // Bytes 24-25: Program Number
-                const programNumber = (section[offset + 24] << 8) | section[offset + 25];
+        parseATSCVCT(section) {
+            try {
+                const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+                const numChannels = section[9];
+                let offset = 10;
 
-                // Bytes 28-29: Source ID
-                const sourceId = (section[offset + 28] << 8) | section[offset + 29];
-
-                if (sourceId && programNumber) {
-                    if (!this.sourceMap.has(sourceId)) {
-                        console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Program ${programNumber} (${major}.${minor})`);
-                        this.sourceMap.set(sourceId, programNumber.toString());
+                for (let i = 0; i < numChannels; i++) {
+                    if (offset + 32 > sectionLength + 3) {
+                        console.log(`[ATSC VCT] Section too short for channel at index ${i}`);
+                        break;
                     }
-                }
+                    // Channel name is 14 bytes (UTF-16)
+                    // Bytes 14-15: Major Channel
+                    const major = ((section[offset + 14] & 0x0F) << 6) | (section[offset + 15] >> 2);
+                    const minor = ((section[offset + 15] & 0x03) << 8) | section[offset + 16];
 
-                const descriptorsLength = ((section[offset + 30] & 0x0F) << 8) | section[offset + 31];
-                offset += 32 + descriptorsLength;
-            }
-            console.log(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
-        } catch (e) {
-            console.error('[ATSC VCT] Error:', e);
-        }
-    },
+                    // Bytes 18-21: Carrier Freq
+                    // Bytes 22-23: Channel TSID
+                    // Bytes 24-25: Program Number
+                    const programNumber = (section[offset + 24] << 8) | section[offset + 25];
 
-    parseATSCEIT(section, sourceId, onFound) {
-        try {
-            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-            // ATSC EIT header is 10 bytes (table_id to num_events_in_section)
-            // section[0] table_id
-            // section[1-2] section_length
-            // section[3-4] source_id
-            // section[5] version_number, current_next_indicator
-            // section[6] section_number
-            // section[7] last_section_number
-            // section[8] protocol_version
-            // section[9] num_events_in_section
-            const numEvents = section[9];
-            console.log(`[ATSC DEBUG] Header: SourceID=${sourceId}, NumEvents=${numEvents}, Len=${sectionLength}`);
-            let offset = 10; // Start of event loop
+                    // Bytes 28-29: Source ID
+                    const sourceId = (section[offset + 28] << 8) | section[offset + 29];
 
-            if (numEvents > 0) {
-                console.log(`[ATSC EIT] Parsing ${numEvents} events for SourceID ${sourceId} (Table 0x${section[0].toString(16)})`);
-            }
-
-            for (let i = 0; i < numEvents; i++) {
-                // Check if enough bytes remain for event_id, start_time, duration, title_length
-                if (offset + 10 > sectionLength + 3) {
-                    console.log(`[ATSC DEBUG] Offset overflow at event ${i}: ${offset} > ${sectionLength}`);
-                    break;
-                }
-
-                const eventId = (section[offset] << 8) | section[offset + 1];
-                const startTimeGPS = section.readUInt32BE(offset + 2);
-                const duration = ((section[offset + 6] & 0x3F) << 16) | (section[offset + 7] << 8) | section[offset + 8];
-                const titleLength = section[offset + 9];
-
-                console.log(`[ATSC DEBUG] Evt ${eventId}: Start=${startTimeGPS} Dur=${duration} TitleLen=${titleLength}`);
-
-                // GPS Epoch 1980-01-06 00:00:00 UTC. diff 315964800
-                const startTime = (startTimeGPS + 315964800) * 1000;
-                const endTime = startTime + duration * 1000;
-
-                let title = '';
-                let description = '';
-                let currentEventOffset = offset + 10;
-
-                // Parse title (Multi-String Structure)
-                if (titleLength > 0 && currentEventOffset + titleLength <= section.length) {
-                    let titleBuffer = section.slice(currentEventOffset, currentEventOffset + titleLength);
-                    console.log(`[ATSC DEBUG] Raw Title Bytes: ${titleBuffer.toString('hex')}`);
-
-                    if (titleBuffer.length > 0) {
-                        const numStrings = titleBuffer[0];
-                        let stringOffset = 1;
-                        // MSS: numStrings(1) + Lang(3) + Segments(1) + Comp(1) + Mode(1) + Len(1) + Text
-                        // Total header size for first segment is 1+3+1+1+1+1 = 8 bytes.
-                        if (numStrings > 0 && titleBuffer.length >= stringOffset + 7) {
-                            const stringLen = titleBuffer[stringOffset + 6];   // Index 7 (Len)
-                            // console.log(`[ATSC DEBUG] MSS String 0: Len=${stringLen}`);
-                            if (titleBuffer.length >= stringOffset + 7 + stringLen) {
-                                title = titleBuffer.slice(stringOffset + 7, stringOffset + 7 + stringLen).toString('utf8');
-                                title = title.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
-                                console.log(`[ATSC DEBUG] Decoded Title: "${title}"`);
-                            }
+                    if (sourceId && programNumber) {
+                        if (!this.sourceMap.has(sourceId)) {
+                            console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Program ${programNumber} (${major}.${minor})`);
+                            this.sourceMap.set(sourceId, programNumber.toString());
                         }
                     }
+
+                    const descriptorsLength = ((section[offset + 30] & 0x0F) << 8) | section[offset + 31];
+                    offset += 32 + descriptorsLength;
                 }
-
-                currentEventOffset += titleLength;
-
-                // Descriptors... (keeping existing logic but adding logs)
-                if (currentEventOffset + 2 <= section.length) {
-                    const descriptorsLength = ((section[currentEventOffset] & 0x0F) << 8) | section[currentEventOffset + 1];
-                    currentEventOffset += 2;
-                    if (currentEventOffset + descriptorsLength <= section.length) {
-                        currentEventOffset += descriptorsLength;
-                    } else {
-                        console.warn(`[ATSC DEBUG] Descriptors overflow.`);
-                        currentEventOffset = section.length;
-                    }
-                } else {
-                    console.warn(`[ATSC DEBUG] No room for desc length.`);
-                }
-
-                if (title && startTime > 0) {
-                    onFound();
-                    const serviceId = this.sourceMap.get(sourceId) || sourceId.toString();
-                    console.log(`[ATSC EPG] INSERTING: "${title}" for Source ${sourceId}->${serviceId}`);
-                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                        [serviceId, startTime, endTime, title, description]);
-                } else {
-                    console.log(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
-                }
-
-                offset = currentEventOffset; // Move to the start of the next event
+                console.log(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
+            } catch (e) {
+                console.error('[ATSC VCT] Error:', e);
             }
-        } catch (e) {
-            console.error('[ATSC DEBUG] Error parsing EIT:', e);
-        }
-    },
-    parseDVBEIT(section, serviceId, onFound) {
-        try {
-            const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
-            let evOffset = 14;
+        },
 
-            while (evOffset < sectionLength - 1) {
-                if (evOffset + 12 > section.length) break;
+        parseATSCEIT(section, sourceId, onFound) {
+            try {
+                const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+                // ATSC EIT header is 10 bytes (table_id to num_events_in_section)
+                // section[0] table_id
+                // section[1-2] section_length
+                // section[3-4] source_id
+                // section[5] version_number, current_next_indicator
+                // section[6] section_number
+                // section[7] last_section_number
+                // section[8] protocol_version
+                // section[9] num_events_in_section
+                const numEvents = section[9];
+                console.log(`[ATSC DEBUG] Header: SourceID=${sourceId}, NumEvents=${numEvents}, Len=${sectionLength}`);
+                let offset = 10; // Start of event loop
 
-                const startTimeMJD = (section[evOffset + 2] << 8) | section[evOffset + 3];
-                const startTimeBCD = (section[evOffset + 4] << 16) | (section[evOffset + 5] << 8) | section[evOffset + 6];
-                const durationBCD = (section[evOffset + 7] << 16) | (section[evOffset + 8] << 8) | section[evOffset + 9];
-                const descriptorsLength = ((section[evOffset + 10] & 0x0F) << 8) | section[evOffset + 11];
+                if (numEvents > 0) {
+                    console.log(`[ATSC EIT] Parsing ${numEvents} events for SourceID ${sourceId} (Table 0x${section[0].toString(16)})`);
+                }
 
-                if (evOffset + 12 + descriptorsLength > section.length) break;
+                for (let i = 0; i < numEvents; i++) {
+                    // Check if enough bytes remain for event_id, start_time, duration, title_length
+                    if (offset + 10 > sectionLength + 3) {
+                        console.log(`[ATSC DEBUG] Offset overflow at event ${i}: ${offset} > ${sectionLength}`);
+                        break;
+                    }
 
-                const startTime = this.parseDVBTime(startTimeMJD, startTimeBCD);
-                const durationSec = (((durationBCD >> 16) & 0x0F) * 3600) + (((durationBCD >> 20) & 0x0F) * 36000) +
-                    (((durationBCD >> 8) & 0x0F) * 60) + (((durationBCD >> 12) & 0x0F) * 600) +
-                    ((durationBCD & 0x0F)) + (((durationBCD >> 4) & 0x0F) * 10);
+                    const eventId = (section[offset] << 8) | section[offset + 1];
+                    const startTimeGPS = section.readUInt32BE(offset + 2);
+                    const duration = ((section[offset + 6] & 0x3F) << 16) | (section[offset + 7] << 8) | section[offset + 8];
+                    const titleLength = section[offset + 9];
 
-                const endTime = startTime + durationSec * 1000;
+                    console.log(`[ATSC DEBUG] Evt ${eventId}: Start=${startTimeGPS} Dur=${duration} TitleLen=${titleLength}`);
 
-                let descOffset = evOffset + 12;
-                let title = '';
-                let desc = '';
+                    // GPS Epoch 1980-01-06 00:00:00 UTC. diff 315964800
+                    const startTime = (startTimeGPS + 315964800) * 1000;
+                    const endTime = startTime + duration * 1000;
 
-                while (descOffset < evOffset + 12 + descriptorsLength) {
-                    const tag = section[descOffset];
-                    const len = section[descOffset + 1];
+                    let title = '';
+                    let description = '';
+                    let currentEventOffset = offset + 10;
 
-                    if (tag === 0x4D) { // DVB Short Event Descriptor (Title)
-                        let titleLen = section[descOffset + 3];
-                        let titleStart = descOffset + 4;
-                        // Handle potential leading compression_type or mode_byte
-                        if (section[titleStart] < 0x20) { titleStart++; titleLen--; }
-                        title = section.slice(titleStart, titleStart + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
-                    } else if (tag === 0x4E) { // DVB Extended Event Descriptor (Description)
-                        // For simplicity, just grab the first description text
-                        if (!desc) {
-                            let textOffset = descOffset + 2;
-                            // Skip descriptor_number, last_descriptor_number, language_code, length_of_items, items
-                            // and get to length_of_text and text_char
-                            // This is a simplified parse, a full parse would iterate through items
-                            if (textOffset + 3 < descOffset + 2 + len) { // Check for language code
-                                textOffset += 3; // Skip language_code
-                                // Skip length_of_items and items loop for now
-                                // Just try to find the text part
-                                let remainingLen = (descOffset + 2 + len) - textOffset;
-                                if (remainingLen > 0) {
-                                    desc = section.slice(textOffset, textOffset + remainingLen).toString('utf8').trim();
+                    // Parse title (Multi-String Structure)
+                    if (titleLength > 0 && currentEventOffset + titleLength <= section.length) {
+                        let titleBuffer = section.slice(currentEventOffset, currentEventOffset + titleLength);
+                        console.log(`[ATSC DEBUG] Raw Title Bytes: ${titleBuffer.toString('hex')}`);
+
+                        if (titleBuffer.length > 0) {
+                            const numStrings = titleBuffer[0];
+                            let stringOffset = 1;
+                            // MSS: numStrings(1) + Lang(3) + Segments(1) + Comp(1) + Mode(1) + Len(1) + Text
+                            // Total header size for first segment is 1+3+1+1+1+1 = 8 bytes.
+                            if (numStrings > 0 && titleBuffer.length >= stringOffset + 7) {
+                                const stringLen = titleBuffer[stringOffset + 6];   // Index 7 (Len)
+                                // console.log(`[ATSC DEBUG] MSS String 0: Len=${stringLen}`);
+                                if (titleBuffer.length >= stringOffset + 7 + stringLen) {
+                                    title = titleBuffer.slice(stringOffset + 7, stringOffset + 7 + stringLen).toString('utf8');
+                                    title = title.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
+                                    console.log(`[ATSC DEBUG] Decoded Title: "${title}"`);
                                 }
                             }
                         }
                     }
-                    descOffset += 2 + len;
-                }
 
-                if (title && startTime > 0) {
-                    onFound();
-                    console.log(`[DVB EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
-                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                        [serviceId.toString(), startTime, endTime, title, desc]);
-                }
+                    currentEventOffset += titleLength;
 
-                evOffset += 12 + descriptorsLength;
+                    // Descriptors... (keeping existing logic but adding logs)
+                    if (currentEventOffset + 2 <= section.length) {
+                        const descriptorsLength = ((section[currentEventOffset] & 0x0F) << 8) | section[currentEventOffset + 1];
+                        currentEventOffset += 2;
+                        if (currentEventOffset + descriptorsLength <= section.length) {
+                            currentEventOffset += descriptorsLength;
+                        } else {
+                            console.warn(`[ATSC DEBUG] Descriptors overflow.`);
+                            currentEventOffset = section.length;
+                        }
+                    } else {
+                        console.warn(`[ATSC DEBUG] No room for desc length.`);
+                    }
+
+                    if (title && startTime > 0) {
+                        onFound();
+                        const serviceId = this.sourceMap.get(sourceId) || sourceId.toString();
+                        console.log(`[ATSC EPG] INSERTING: "${title}" for Source ${sourceId}->${serviceId}`);
+                        db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                            [serviceId, startTime, endTime, title, description]);
+                    } else {
+                        console.log(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
+                    }
+
+                    offset = currentEventOffset; // Move to the start of the next event
+                }
+            } catch (e) {
+                console.error('[ATSC DEBUG] Error parsing EIT:', e);
             }
-        } catch (e) {
-            console.error('[DVB EPG] Error:', e);
-        }
-    }
-};
+        },
+        parseDVBEIT(section, serviceId, onFound) {
+            try {
+                const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+                let evOffset = 14;
 
-// Schedule EPG grab every 15 minutes
-setInterval(() => EPG.grab(), 15 * 60 * 1000);
+                while (evOffset < sectionLength - 1) {
+                    if (evOffset + 12 > section.length) break;
+
+                    const startTimeMJD = (section[evOffset + 2] << 8) | section[evOffset + 3];
+                    const startTimeBCD = (section[evOffset + 4] << 16) | (section[evOffset + 5] << 8) | section[evOffset + 6];
+                    const durationBCD = (section[evOffset + 7] << 16) | (section[evOffset + 8] << 8) | section[evOffset + 9];
+                    const descriptorsLength = ((section[evOffset + 10] & 0x0F) << 8) | section[evOffset + 11];
+
+                    if (evOffset + 12 + descriptorsLength > section.length) break;
+
+                    const startTime = this.parseDVBTime(startTimeMJD, startTimeBCD);
+                    const durationSec = (((durationBCD >> 16) & 0x0F) * 3600) + (((durationBCD >> 20) & 0x0F) * 36000) +
+                        (((durationBCD >> 8) & 0x0F) * 60) + (((durationBCD >> 12) & 0x0F) * 600) +
+                        ((durationBCD & 0x0F)) + (((durationBCD >> 4) & 0x0F) * 10);
+
+                    const endTime = startTime + durationSec * 1000;
+
+                    let descOffset = evOffset + 12;
+                    let title = '';
+                    let desc = '';
+
+                    while (descOffset < evOffset + 12 + descriptorsLength) {
+                        const tag = section[descOffset];
+                        const len = section[descOffset + 1];
+
+                        if (tag === 0x4D) { // DVB Short Event Descriptor (Title)
+                            let titleLen = section[descOffset + 3];
+                            let titleStart = descOffset + 4;
+                            // Handle potential leading compression_type or mode_byte
+                            if (section[titleStart] < 0x20) { titleStart++; titleLen--; }
+                            title = section.slice(titleStart, titleStart + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+                        } else if (tag === 0x4E) { // DVB Extended Event Descriptor (Description)
+                            // For simplicity, just grab the first description text
+                            if (!desc) {
+                                let textOffset = descOffset + 2;
+                                // Skip descriptor_number, last_descriptor_number, language_code, length_of_items, items
+                                // and get to length_of_text and text_char
+                                // This is a simplified parse, a full parse would iterate through items
+                                if (textOffset + 3 < descOffset + 2 + len) { // Check for language code
+                                    textOffset += 3; // Skip language_code
+                                    // Skip length_of_items and items loop for now
+                                    // Just try to find the text part
+                                    let remainingLen = (descOffset + 2 + len) - textOffset;
+                                    if (remainingLen > 0) {
+                                        desc = section.slice(textOffset, textOffset + remainingLen).toString('utf8').trim();
+                                    }
+                                }
+                            }
+                        }
+                        descOffset += 2 + len;
+                    }
+
+                    if (title && startTime > 0) {
+                        onFound();
+                        console.log(`[DVB EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
+                        db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                            [serviceId.toString(), startTime, endTime, title, desc]);
+                    }
+
+                    evOffset += 12 + descriptorsLength;
+                }
+            } catch (e) {
+                console.error('[DVB EPG] Error:', e);
+            }
+        }
+    };
+
+    // Schedule EPG grab every 15 minutes
+    setInterval(() => EPG.grab(), 15 * 60 * 1000);
 // Priority: Initial grab on startup
 EPG.grab();
 
