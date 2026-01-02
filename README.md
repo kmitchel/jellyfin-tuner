@@ -31,13 +31,13 @@ sudo apt install v4l-utils ffmpeg nodejs npm sqlite3
 1. Clone the repository into `/opt`:
    ```bash
    # Replace with your repository URL
-   sudo git clone https://github.com/kmitchel/jellyfin-tuner.git /opt/express-m3u-tuner
-   cd /opt/express-m3u-tuner
+   sudo git clone https://github.com/kmitchel/jellyfin-tuner.git /opt/jellyfin-tuner
+   cd /opt/jellyfin-tuner
    ```
 
 2. Set permissions for the `jellyfin` user:
    ```bash
-   sudo chown -R jellyfin:jellyfin /opt/express-m3u-tuner
+   sudo chown -R jellyfin:jellyfin /opt/jellyfin-tuner
    ```
 
 3. Install dependencies:
@@ -74,7 +74,7 @@ The `jellyfin` user needs access to the application files, the DVB hardware, and
 
 ```bash
 # Set ownership of the application directory
-sudo chown -R jellyfin:jellyfin /opt/express-m3u-tuner
+sudo chown -R jellyfin:jellyfin /opt/jellyfin-tuner
 
 # Add jellyfin to the video and render groups for hardware access
 sudo usermod -aG video,render jellyfin
@@ -97,7 +97,7 @@ After=network.target
 Type=simple
 User=jellyfin
 Group=jellyfin
-WorkingDirectory=/opt/express-m3u-tuner
+WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
 

@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=jellyfin
 Group=jellyfin
-WorkingDirectory=/opt/express-m3u-tuner
+WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
 # Environment variables can be added here if needed
