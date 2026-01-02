@@ -1,15 +1,16 @@
 {
-  "name": "express-m3u-tuner",
-  "version": "1.0.0",
-  "description": "ExpressJS app for dual tuner USB dongle",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "express": "^5.2.1"
-  }
+    "name": "express-m3u-tuner",
+    "version": "1.0.0",
+    "description": "ExpressJS app for dual tuner USB dongle",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "express": "^5.2.1",
+        "sqlite3": "^5.1.7"
+    }
 }

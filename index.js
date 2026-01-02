@@ -1,6 +1,21 @@
 const express = require('express');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('epg.db');
+
+// Initialize EPG Database
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS programs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_service_id TEXT,
+        start_time INTEGER,
+        end_time INTEGER,
+        title TEXT,
+        description TEXT,
+        UNIQUE(channel_service_id, start_time, title)
+    )`);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -72,15 +87,18 @@ function loadChannels() {
             const name = lines[0].replace(']', '').trim();
             const serviceIdLine = lines.find(l => l.trim().startsWith('SERVICE_ID'));
             const vChannelLine = lines.find(l => l.trim().startsWith('VCHANNEL'));
+            const freqLine = lines.find(l => l.trim().startsWith('FREQUENCY'));
 
             if (serviceIdLine && vChannelLine) {
                 const serviceId = serviceIdLine.split('=')[1].trim();
                 const vChannel = vChannelLine.split('=')[1].trim();
+                const frequency = freqLine ? freqLine.split('=')[1].trim() : null;
 
                 CHANNELS.push({
                     number: vChannel,
                     name: name,
-                    serviceId: serviceId
+                    serviceId: serviceId,
+                    frequency: frequency
                 });
             }
         });
@@ -104,7 +122,6 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Helper: Acquire an available tuner, preempting if necessary
 async function acquireTuner() {
     // 1. Try Round-Robin to find a free tuner that wasn't the last one used
-    // This gives recently closed tuners more time to physically settle.
     for (let i = 0; i < TUNERS.length; i++) {
         const nextIndex = (lastTunerIndex + 1 + i) % TUNERS.length;
         const potentialTuner = TUNERS[nextIndex];
@@ -114,16 +131,15 @@ async function acquireTuner() {
         }
     }
 
-    // 2. If all busy, try to preempt one (preempting the oldest used if possible)
+    // 2. If all busy, try to preempt one 
     if (ENABLE_PREEMPTION) {
-        // We pick the oldest one (starting from lastTunerIndex + 1)
         const preemptIndex = (lastTunerIndex + 1) % TUNERS.length;
         const tuner = TUNERS[preemptIndex];
 
-        if (tuner) {
+        if (tuner && !tuner.epgScanning) { // Don't preempt EPG scan, it releases soon anyway
             console.log(`Preempting Tuner ${tuner.id} for new request...`);
             if (tuner.killSwitch) {
-                tuner.killSwitch(); // Trigger cleanup of the active stream
+                tuner.killSwitch();
             }
             // Wait for it to become free (max 3s)
             for (let i = 0; i < 15; i++) {
@@ -133,11 +149,10 @@ async function acquireTuner() {
                 }
                 await delay(200);
             }
-            console.warn(`Tuner ${tuner.id} failed to release after preemption.`);
         }
     }
 
-    // 3. Last ditch: wait for any tuner (still favors RR)
+    // 3. Last ditch: wait for any tuner 
     for (let i = 0; i < 10; i++) {
         for (let j = 0; j < TUNERS.length; j++) {
             const idx = (lastTunerIndex + 1 + j) % TUNERS.length;
@@ -152,6 +167,187 @@ async function acquireTuner() {
     return null;
 }
 
+// EPG Modle
+const EPG = {
+    lastScan: 0,
+    isScanning: false,
+
+    // Helper: Parse DVB BCD and MJD to Timestamp
+    parseDVBTime(mjd, bcd) {
+        const Y = Math.floor((mjd - 15078.2) / 365.25);
+        const M = Math.floor((mjd - 14956.1 - Math.floor(Y * 365.25)) / 30.6001);
+        const D = mjd - 14956 - Math.floor(Y * 365.25) - Math.floor(M * 30.6001);
+        const k = (M === 14 || M === 15) ? 1 : 0;
+        const year = 1900 + Y + k;
+        const month = M - 1 - k * 12;
+
+        const h = ((bcd >> 20) & 0x0F) * 10 + ((bcd >> 16) & 0x0F);
+        const m = ((bcd >> 12) & 0x0F) * 10 + ((bcd >> 8) & 0x0F);
+        const s = ((bcd >> 4) & 0x0F) * 10 + (bcd & 0x0F);
+
+        try {
+            return new Date(Date.UTC(year, month - 1, D, h, m, s)).getTime();
+        } catch (e) { return 0; }
+    },
+
+    async grab() {
+        if (this.isScanning) return;
+
+        // Check if all tuners are free
+        const freeTuners = TUNERS.filter(t => !t.inUse);
+        if (freeTuners.length < TUNERS.length) {
+            console.log('[EPG] Waiting for all tuners to be free to start scan...');
+            return;
+        }
+
+        this.isScanning = true;
+        console.log('[EPG] Starting background EPG scan...');
+
+        const muxMap = new Map();
+        CHANNELS.forEach(c => {
+            if (c.frequency) {
+                if (!muxMap.has(c.frequency)) muxMap.set(c.frequency, c.name);
+            }
+        });
+
+        const frequencies = Array.from(muxMap.keys());
+
+        for (const freq of frequencies) {
+            // Re-check tuner status before each mux
+            const tuner = TUNERS.find(t => !t.inUse);
+            if (!tuner) break;
+
+            tuner.inUse = true;
+            tuner.epgScanning = true;
+            const channelName = muxMap.get(freq);
+
+            console.log(`[EPG] Scanning mux at ${freq} Hz using ${channelName} on Tuner ${tuner.id}...`);
+
+            try {
+                await this.scanMux(tuner, channelName);
+            } catch (e) {
+                console.error(`[EPG] Error scanning mux at ${freq}:`, e);
+            }
+
+            tuner.inUse = false;
+            tuner.epgScanning = false;
+
+            // Short delay between muxes
+            await delay(2000);
+        }
+
+        this.isScanning = false;
+        this.lastScan = Date.now();
+        console.log('[EPG] Background EPG scan complete.');
+    },
+
+    scanMux(tuner, channelName) {
+        return new Promise((resolve) => {
+            const zap = spawn('dvbv5-zap', [
+                '-c', CHANNELS_CONF,
+                '-r',
+                '-a', tuner.id,
+                '-P', '18', // Only EIT PID
+                '-o', '-',
+                channelName
+            ]);
+
+            let buffer = Buffer.alloc(0);
+
+            zap.stdout.on('data', (data) => {
+                buffer = Buffer.concat([buffer, data]);
+                if (buffer.length > 5 * 1024 * 1024) { // 5MB should be plenty for EPG
+                    zap.kill('SIGKILL');
+                }
+            });
+
+            const timeout = setTimeout(() => zap.kill('SIGKILL'), 20000); // 20s per mux
+
+            zap.on('exit', () => {
+                clearTimeout(timeout);
+                this.parseEIT(buffer);
+                resolve();
+            });
+        });
+    },
+
+    parseEIT(buffer) {
+        // Minimal TS/EIT Parser
+        for (let i = 0; i < buffer.length - 188; i += 188) {
+            if (buffer[i] !== 0x47) {
+                // Not sync, search next
+                let next = buffer.indexOf(0x47, i);
+                if (next === -1) break;
+                i = next;
+            }
+
+            const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2];
+            if (pid !== 18) continue;
+
+            const pusi = buffer[i + 1] & 0x40;
+            const adaptation = (buffer[i + 3] & 0x30) >> 4;
+            let offset = 4;
+            if (adaptation === 2 || adaptation === 3) offset += buffer[i + 4] + 1;
+            if (pusi) offset += buffer[i + offset] + 1;
+
+            const payload = buffer.slice(i + offset, i + 188);
+            if (payload.length < 12) continue;
+
+            const tableId = payload[0];
+            if (tableId < 0x4E || tableId > 0x6F) continue; // EIT Table IDs
+
+            const serviceId = (payload[3] << 8) | payload[4];
+
+            // Loop through events
+            let evOffset = 15; // Start of events loop
+            const sectionLength = ((payload[1] & 0x0F) << 8) | payload[2];
+
+            while (evOffset < sectionLength - 4) {
+                const startTimeMJD = (payload[evOffset + 2] << 8) | payload[evOffset + 3];
+                const startTimeBCD = (payload[evOffset + 4] << 16) | (payload[evOffset + 5] << 8) | payload[evOffset + 6];
+                const durationBCD = (payload[evOffset + 7] << 16) | (payload[evOffset + 8] << 8) | payload[evOffset + 9];
+                const descriptorsLength = ((payload[evOffset + 10] & 0x0F) << 8) | payload[evOffset + 11];
+
+                const startTime = this.parseDVBTime(startTimeMJD, startTimeBCD);
+                const durationSec = (((durationBCD >> 16) & 0xFF) >> 4) * 36000 + ((durationBCD >> 16) & 0x0F) * 3600 +
+                    (((durationBCD >> 8) & 0xFF) >> 4) * 600 + ((durationBCD >> 8) & 0x0F) * 60 +
+                    ((durationBCD & 0xFF) >> 4) * 10 + (durationBCD & 0x0F);
+
+                const endTime = startTime + durationSec * 1000;
+
+                // Parse descriptors for title
+                let descOffset = evOffset + 12;
+                let title = '';
+                let desc = '';
+
+                while (descOffset < evOffset + 12 + descriptorsLength) {
+                    const tag = payload[descOffset];
+                    const len = payload[descOffset + 1];
+                    if (tag === 0x4D) { // Short Event Descriptor
+                        const titleLen = payload[descOffset + 3];
+                        title = payload.slice(descOffset + 4, descOffset + 4 + titleLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+                        const descLen = payload[descOffset + 4 + titleLen];
+                        desc = payload.slice(descOffset + 5 + titleLen, descOffset + 5 + titleLen + descLen).toString('utf8').replace(/[^\x20-\x7E]/g, '');
+                    }
+                    descOffset += 2 + len;
+                }
+
+                if (title && startTime > 0) {
+                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                        [serviceId.toString(), startTime, endTime, title, desc]);
+                }
+
+                evOffset += 12 + descriptorsLength;
+            }
+        }
+    }
+};
+
+// Schedule EPG grab every 15 minutes
+setInterval(() => EPG.grab(), 15 * 60 * 1000);
+// Also try once at startup after a delay
+setTimeout(() => EPG.grab(), 30000);
+
 // Generate M3U Playlist
 app.get('/lineup.m3u', (req, res) => {
     let m3u = '#EXTM3U\n';
@@ -164,6 +360,42 @@ app.get('/lineup.m3u', (req, res) => {
 
     res.set('Content-Type', 'audio/x-mpegurl');
     res.send(m3u);
+});
+
+// XMLTV Endpoint
+app.get('/xmltv.xml', (req, res) => {
+    db.all("SELECT * FROM programs WHERE end_time > ?", [Date.now()], (err, rows) => {
+        if (err) return res.status(500).send(err.message);
+
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<tv>\n';
+
+        // Channels
+        CHANNELS.forEach(c => {
+            xml += `  <channel id="${c.number}">\n`;
+            xml += `    <display-name>${c.name}</display-name>\n`;
+            xml += '  </channel>\n';
+        });
+
+        // Programs
+        rows.forEach(p => {
+            // Find channel number by service id
+            const channel = CHANNELS.find(c => c.serviceId === p.channel_service_id);
+            if (!channel) return;
+
+            const start = new Date(p.start_time).toISOString().replace(/[-:]/g, '').split('.')[0] + ' +0000';
+            const end = new Date(p.end_time).toISOString().replace(/[-:]/g, '').split('.')[0] + ' +0000';
+
+            xml += `  <programme start="${start}" stop="${end}" channel="${channel.number}">\n`;
+            xml += `    <title lang="en">${p.title}</title>\n`;
+            xml += `    <desc lang="en">${p.description}</desc>\n`;
+            xml += '  </programme>\n';
+        });
+
+        xml += '</tv>';
+        res.set('Content-Type', 'application/xml');
+        res.send(xml);
+    });
 });
 
 // Stream Endpoint
