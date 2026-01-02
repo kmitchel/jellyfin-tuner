@@ -63,6 +63,11 @@ const CHANNELS_CONF = process.env.CHANNELS_CONF || '/etc/dvb/channels.conf';
 const ENABLE_PREEMPTION = process.env.ENABLE_PREEMPTION === 'true'; // Default: false
 const ENABLE_TRANSCODING = process.env.ENABLE_TRANSCODING !== 'false'; // Default: true
 const ENABLE_QSV = process.env.ENABLE_QSV === 'true'; // Default: false
+const VERBOSE_LOGGING = process.env.VERBOSE_LOGGING === 'true'; // Default: false
+
+function debugLog(...args) {
+    if (VERBOSE_LOGGING) console.log(...args);
+}
 
 // Dynamic Channel Loader
 let CHANNELS = [];
@@ -316,7 +321,7 @@ const EPG = {
                 channelName
             ];
 
-            console.log(`[EPG Debug] Spawning zap with args: ${JSON.stringify(args)}`);
+            debugLog(`[EPG Debug] Spawning zap with args: ${JSON.stringify(args)}`);
 
             const zap = spawn('dvbv5-zap', args);
 
@@ -335,7 +340,7 @@ const EPG = {
             });
 
             zap.stderr.on('data', (d) => {
-                console.log(`[EPG Debug] Zap stderr: ${d.toString()}`);
+                debugLog(`[EPG Debug] Zap stderr: ${d.toString()}`);
             });
 
             const timeout = setTimeout(() => {
@@ -360,7 +365,7 @@ const EPG = {
         const stats = { count: 0 };
         const sections = new Map();
 
-        console.log(`[EPG] Beginning parse of ${buffer.length} bytes...`);
+        debugLog(`[EPG] Beginning parse of ${buffer.length} bytes...`);
         const pidCounts = new Map();
         const tableCounts = new Map();
 
@@ -406,12 +411,12 @@ const EPG = {
 
 
         const sortedPids = Array.from(pidCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
-        console.log('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
-        console.log(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
+        debugLog('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
+        debugLog(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
 
         const tableSummary = {};
         tableCounts.forEach((v, k) => tableSummary[`0x${k.toString(16).toUpperCase()}`] = v);
-        console.log('[EPG] ATSC Tables found:', tableSummary);
+        debugLog('[EPG] ATSC Tables found:', tableSummary);
 
         return stats.count;
     },
@@ -479,7 +484,7 @@ const EPG = {
                 const descriptorsLength = ((section[offset + 30] & 0x03) << 8) | section[offset + 31];
                 offset += 32 + descriptorsLength;
             }
-            console.log(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
+            debugLog(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
         } catch (e) {
             console.error('[ATSC VCT] Error:', e);
         }
@@ -508,7 +513,7 @@ const EPG = {
             for (let i = 0; i < numEvents; i++) {
                 // Check if enough bytes remain for event_id, start_time, duration, title_length
                 if (offset + 10 > sectionLength + 3) {
-                    console.log(`[ATSC DEBUG] Offset overflow at event ${i}: ${offset} > ${sectionLength}`);
+                    debugLog(`[ATSC DEBUG] Offset overflow at event ${i}: ${offset} > ${sectionLength}`);
                     break;
                 }
 
@@ -542,7 +547,7 @@ const EPG = {
                             if (titleBuffer.length >= stringOffset + 7 + stringLen) {
                                 title = titleBuffer.slice(stringOffset + 7, stringOffset + 7 + stringLen).toString('utf8');
                                 title = title.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
-                                console.log(`[ATSC DEBUG] Decoded Title: "${title}"`);
+                                debugLog(`[ATSC DEBUG] Decoded Title: "${title}"`);
                             }
                         }
                     }
@@ -570,7 +575,7 @@ const EPG = {
                     db.run("INSERT OR REPLACE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [virtualChannel, startTime, endTime, title, description]);
                 } else {
-                    console.log(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
+                    debugLog(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
                 }
 
                 offset = currentEventOffset; // Move to the start of the next event
