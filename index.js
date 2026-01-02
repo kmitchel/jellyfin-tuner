@@ -477,22 +477,19 @@ const EPG = {
                 } else {
                     console.warn(`[ATSC EPG] Not enough bytes for descriptors_length field at offset ${currentEventOffset}.`);
                 }
-            }
+                if (title && startTime > 0) {
+                    onFound();
+                    console.log(`[ATSC EPG] Parsed: "${title}" for Source ID: ${sourceId}`);
+                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                        [serviceId.toString(), startTime, endTime, title, description]);
+                }
 
-            if (title && startTime > 0) {
-                onFound();
-                console.log(`[ATSC EPG] Parsed: "${title}" for Source ID: ${serviceId}`);
-                db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                    [serviceId.toString(), startTime, endTime, title, description]); // Description is empty for now
-            } else {
-                // console.log(`[ATSC EPG] Skipped event. Title: "${title}", Start: ${startTime}`);
+                offset = currentEventOffset; // Move to the start of the next event
             }
-
-            offset = currentEventOffset; // Move to the start of the next event
+        } catch (e) {
+            console.error('[ATSC EPG] Error:', e);
         }
-        } catch(e) {
-        console.error('[ATSC EPG] Error:', e);
-    }
+    },
 },
 
     parseDVBEIT(section, serviceId, onFound) {
