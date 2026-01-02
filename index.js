@@ -308,13 +308,15 @@ const EPG = {
 
             const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2];
 
-            // Track relevant PIDs for debugging
-            if (pid === 18 || pid === 8187) {
-                pidCounts.set(pid, (pidCounts.get(pid) || 0) + 1);
-            }
+            // Track all PIDs for detailed debugging
+            pidCounts.set(pid, (pidCounts.get(pid) || 0) + 1);
 
-            // Allow DVB EIT (18) or ATSC PSIP (8187)
-            if (pid !== 18 && pid !== 8187) continue;
+            // ATSC PSIP (0x1FFB=8187) is the Master Guide Table/Base PID
+            // DVB EIT (0x12=18)
+            const isGuidePid = (pid === 0x12 || pid === 0x1FFB);
+
+            // For now, process EVERYTHING to find where the data is hiding
+            // if (!isGuidePid) continue;
 
             const pusi = buffer[i + 1] & 0x40;
             const adaptation = (buffer[i + 3] & 0x30) >> 4;
@@ -350,7 +352,11 @@ const EPG = {
             }
         }
 
-        console.log('[EPG] Packet summary:', Object.fromEntries(pidCounts));
+        // Detailed summary sorted by packet count
+        const sortedPids = Array.from(pidCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        console.log('[EPG] Top 10 PIDs found:', Object.fromEntries(sortedPids));
+        console.log(`[EPG] Guide PIDs seen? DVB(18): ${pidCounts.get(18) || 0}, ATSC(8187): ${pidCounts.get(8187) || 0}`);
+
         return programCount;
     },
 
