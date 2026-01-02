@@ -258,6 +258,7 @@ const EPG = {
             const zap = spawn('dvbv5-zap', [
                 '-c', CHANNELS_CONF,
                 '-r', // Capture all PIDs (required for ATSC dynamic EIT)
+                '-P', '0:8187', // Force capture of PAT and ATSC Base PID to ensure we get tables
                 '-a', tuner.id,
                 '-o', '-',
                 channelName
