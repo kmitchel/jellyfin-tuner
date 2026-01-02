@@ -299,21 +299,8 @@ const EPG = {
 
     scanMux(tuner, channelName) {
         return new Promise((resolve) => {
-            const path = require('path');
-            // Find the raw config for this channel to ensure zap finds it
-            const channel = CHANNELS.find(c => c.name === channelName);
-            const tempConf = path.resolve(__dirname, `epg_scan_${tuner.id}.conf`);
-
-            if (channel && channel.rawConfig) {
-                fs.writeFileSync(tempConf, channel.rawConfig);
-            } else {
-                // Fallback to main conf if something weird happens (though muxMap comes from CHANNELS so this shouldn't fail)
-                console.warn(`[EPG] Raw config not found for ${channelName}, using main conf.`);
-                const fs = require('fs'); fs.copyFileSync(CHANNELS_CONF, tempConf);
-            }
-
             const args = [
-                '-c', tempConf,
+                '-c', CHANNELS_CONF,
                 '-a', tuner.id,
                 '-P', // User requested standalone flag
                 '-t', '15',
@@ -350,9 +337,7 @@ const EPG = {
 
             zap.on('exit', () => {
                 clearTimeout(timeout);
-                try {
-                    if (require('fs').existsSync(tempConf)) require('fs').unlinkSync(tempConf);
-                } catch (e) { /* ignore cleanup error */ }
+
 
                 const count = this.parseEIT(buffer);
                 console.log(`[EPG] Mux scan finished. Discovered ${count} program entries.`);
