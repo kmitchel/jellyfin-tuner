@@ -53,7 +53,11 @@ sudo apt install v4l-utils ffmpeg nodejs npm sqlite3
    ```
 
 5. **Channel Icons (Optional)**:
-   Create a `logos.json` in the project root to map channel numbers or names to icon URLs:
+   Create a `logos.json` in the project root to map channel numbers or names to icon URLs. An example file `logos.json.example` is provided:
+   ```bash
+   cp logos.json.example logos.json
+   ```
+   **Example `logos.json` structure:**
    ```json
    {
      "15.1": "https://example.com/abc-logo.png",
@@ -178,6 +182,11 @@ If you update your `channels.conf` or notice your guide is stale/incorrect in Je
 
 4. **Refresh Guide Data**:
    In the Jellyfin Dashboard, go to **Live TV** and click **Refresh Guide Data**.
+
+### ⚠️ Known Issues
+
+- **EPG Virtual Channel Mismatch**: In some broadcast environments, EPG data may occasionally display on the wrong subchannel (e.g., 15.3 program data appearing on 15.1). This is typically caused by inconsistencies in the broadcaster's metadata (Source ID/Service ID mapping) or overlapping signals from different transmitters.
+- **Chromecast Connectivity**: Some users have reported that the Jellyfin Android/Chromecast application may repeatedly close its connection and restart the stream. This behavior appears unique to the Chromecast environment and may relate to how it handles the underlying MPEG-TS stream timing.
 
 ## 📄 License
 ISC
