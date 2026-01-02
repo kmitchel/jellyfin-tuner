@@ -986,7 +986,6 @@ app.get('/stream/:channelNum', async (req, res) => {
         '-err_detect', 'ignore_err',
         '-analyzeduration', '2000000',
         '-probesize', '2000000',
-        '-re',
         '-i', 'pipe:0'
     );
 
