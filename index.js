@@ -499,7 +499,9 @@ const EPG = {
                             // const langCode = titleBuffer.slice(stringOffset, stringOffset + 3).toString('ascii');
                             const stringLen = titleBuffer[stringOffset + 3];
                             if (titleBuffer.length >= stringOffset + 4 + stringLen) {
-                                title = titleBuffer.slice(stringOffset + 4, stringOffset + 4 + stringLen).toString('utf8').trim();
+                                title = titleBuffer.slice(stringOffset + 4, stringOffset + 4 + stringLen).toString('utf8');
+                                // Remove null bytes and other control chars that break XML
+                                title = title.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
                             }
                         }
                     }
