@@ -597,22 +597,22 @@ const EPG = {
                     const virtualChannel = `${major}.${minor}`;
 
                     // Match logic:
-                    // 1. Exact match for Frequency AND ServiceID (Most reliable for a specific mux)
-                    let channel = CHANNELS.find(c => c.frequency == freq && c.serviceId == programNumber.toString());
+                    // 1. High Precision: Match by Frequency AND Virtual Channel Number (Most reliable)
+                    let channel = CHANNELS.find(c => c.frequency == freq && c.number === virtualChannel);
 
-                    // 2. Fallback: Match by Virtual Channel Number + Frequency
+                    // 2. Fallback: Match by Frequency AND ServiceID (Program Number)
                     if (!channel) {
-                        channel = CHANNELS.find(c => c.frequency == freq && c.number === virtualChannel);
+                        channel = CHANNELS.find(c => c.frequency == freq && c.serviceId == programNumber.toString());
                     }
 
-                    // 3. Last Resort: Global Virtual Channel match
+                    // 3. Last Resort: Global Virtual Channel match (for redundancy)
                     if (!channel) {
                         channel = CHANNELS.find(c => c.number === virtualChannel);
                     }
 
                     if (channel) {
                         if (this.sourceMap.get(mapKey) !== channel.number) {
-                            debugLog(`[ATSC VCT] Map: ${freq} Source ${sourceId} -> ${channel.name} (${channel.number}) [Actual VC: ${virtualChannel}]`);
+                            debugLog(`[ATSC VCT] Map: ${freq} Source ${sourceId} -> ${channel.name} (${channel.number})`);
                             this.sourceMap.set(mapKey, channel.number);
                         }
                     } else {
@@ -883,7 +883,7 @@ app.get('/lineup.m3u', (req, res) => {
 
 // XMLTV Endpoint
 app.get('/xmltv.xml', (req, res) => {
-    db.all("SELECT * FROM programs WHERE end_time > ? ORDER BY channel_service_id, start_time", [Date.now()], (err, rows) => {
+    db.all("SELECT * FROM programs WHERE end_time > ? ORDER BY frequency, channel_service_id, start_time", [Date.now()], (err, rows) => {
         if (err) {
             console.error(err);
             return res.status(500).send(err.message);
