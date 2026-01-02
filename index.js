@@ -279,7 +279,6 @@ const EPG = {
             const args = [
                 '-c', tempConf,
                 '-a', tuner.id,
-                '-P', '0:8187',
                 '-t', '15',
                 '-o', '-',
                 channelName
