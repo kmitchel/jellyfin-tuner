@@ -68,7 +68,7 @@ try {
 
 const CHANNELS_CONF = process.env.CHANNELS_CONF || path.resolve(process.cwd(), 'channels.conf');
 const ENABLE_PREEMPTION = process.env.ENABLE_PREEMPTION === 'true'; // Default: false
-const ENABLE_TRANSCODING = process.env.ENABLE_TRANSCODING !== 'false'; // Default: true
+const ENABLE_TRANSCODING = process.env.ENABLE_TRANSCODING === 'true'; // Default: false
 const ENABLE_QSV = process.env.ENABLE_QSV === 'true'; // Default: false
 const VERBOSE_LOGGING = process.env.VERBOSE_LOGGING === 'true'; // Default: false
 

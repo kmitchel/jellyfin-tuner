@@ -134,7 +134,7 @@ Once the service is active, the server is available on port `3000` (default). It
 | :--- | :--- | :--- |
 | `PORT` | Server port | `3000` |
 | `CHANNELS_CONF` | Path to your channels file | `./channels.conf` |
-| `ENABLE_TRANSCODING`| Toggle FFmpeg transcoding | `true` |
+| `ENABLE_TRANSCODING`| Toggle FFmpeg transcoding | `false` |
 | `ENABLE_QSV` | Enable Intel QSV Hardware Accel | `false` |
 | `ENABLE_PREEMPTION` | Allow tuners to be stolen | `false` |
 | `VERBOSE_LOGGING` | Enable deep debug logs | `false` |
