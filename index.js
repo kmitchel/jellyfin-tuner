@@ -9,7 +9,6 @@ const db = new sqlite3.Database(dbPath);
 
 
 const app = express();
-app.use(express.static('public'));
 const PORT = process.env.PORT || 3000;
 
 // Tuner Configuration
