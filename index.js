@@ -15,7 +15,7 @@ db.serialize(() => {
         end_time INTEGER,
         title TEXT,
         description TEXT,
-        UNIQUE(channel_service_id, start_time, title)
+        UNIQUE(channel_service_id, start_time)
     )`);
 });
 
@@ -491,10 +491,11 @@ const EPG = {
                 // Bytes 28-29: Source ID
                 const sourceId = (section[offset + 28] << 8) | section[offset + 29];
 
-                if (sourceId && programNumber) {
+                if (sourceId) {
+                    const virtualChannel = `${major}.${minor}`;
                     if (!this.sourceMap.has(sourceId)) {
-                        console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Program ${programNumber} (${major}.${minor})`);
-                        this.sourceMap.set(sourceId, programNumber.toString());
+                        console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Virtual ${virtualChannel}`);
+                        this.sourceMap.set(sourceId, virtualChannel);
                     }
                 }
 
@@ -588,10 +589,9 @@ const EPG = {
 
                 if (title && startTime > 0) {
                     onFound();
-                    const serviceId = this.sourceMap.get(sourceId) || sourceId.toString();
-                    console.log(`[ATSC EPG] INSERTING: "${title}" for Source ${sourceId}->${serviceId}`);
-                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                        [serviceId, startTime, endTime, title, description]);
+                    const virtualChannel = this.sourceMap.get(sourceId) || sourceId.toString();
+                    db.run("INSERT OR REPLACE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                        [virtualChannel, startTime, endTime, title, description]);
                 } else {
                     console.log(`[ATSC DEBUG] Skipped: Title="${title}" Start=${startTime}`);
                 }
@@ -720,8 +720,8 @@ app.get('/xmltv.xml', (req, res) => {
 
         // Programs
         rows.forEach(p => {
-            // Find channel number by service id
-            const channel = CHANNELS.find(c => c.serviceId === p.channel_service_id);
+            // Find channel by number (which we now store in channel_service_id for ATSC)
+            const channel = CHANNELS.find(c => c.number === p.channel_service_id || c.serviceId === p.channel_service_id);
             if (!channel) {
                 // console.warn(`[XMLTV Debug] Orphaned program for Service ID ${p.channel_service_id} (No matching channel config)`);
                 return;
