@@ -279,6 +279,7 @@ const EPG = {
             const args = [
                 '-c', tempConf,
                 '-a', tuner.id,
+                '-P', '0:8187', // Re-enabled PID filtering/inclusion
                 '-t', '15',
                 '-o', '-',
                 channelName
