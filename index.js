@@ -222,13 +222,9 @@ const EPG = {
             const frequencies = Array.from(muxMap.keys());
 
             for (const freq of frequencies) {
-                console.log(`[EPG Verbose] Checking availability for freq ${freq}...`);
                 // Re-check tuner status before each mux
                 const tuner = TUNERS.find(t => !t.inUse);
-                if (!tuner) {
-                    console.log('[EPG Verbose] No tuners available for this mux.');
-                    break;
-                }
+                if (!tuner) break;
 
                 tuner.inUse = true;
                 tuner.epgScanning = true;
@@ -244,7 +240,6 @@ const EPG = {
 
                 tuner.inUse = false;
                 tuner.epgScanning = false;
-                console.log(`[EPG Verbose] Released Tuner ${tuner.id}`);
 
                 // Short delay between muxes
                 await delay(2000);
@@ -267,8 +262,6 @@ const EPG = {
             const tempConf = path.resolve(__dirname, `epg_scan_${tuner.id}.conf`);
 
             if (channel && channel.rawConfig) {
-                console.log(`[EPG Debug] Writing temp conf to ${tempConf} for channel '${channelName}' (len=${channelName.length})`);
-                console.log(`[EPG Debug] Config content (JSON safe): ${JSON.stringify(channel.rawConfig)}`);
                 fs.writeFileSync(tempConf, channel.rawConfig);
             } else {
                 // Fallback to main conf if something weird happens (though muxMap comes from CHANNELS so this shouldn't fail)
@@ -297,10 +290,8 @@ const EPG = {
                     console.log(`[EPG] Receiving data stream for ${channelName}...`);
                     dataReceived = true;
                 }
-                console.log(`[EPG Verbose] Received ${data.length} bytes chunk.`);
                 buffer = Buffer.concat([buffer, data]);
                 if (buffer.length > 15 * 1024 * 1024) { // 15MB limit for full mux scan
-                    console.log('[EPG Verbose] Buffer limit reached (15MB), killing zap.');
                     zap.kill('SIGKILL');
                 }
             });
@@ -316,6 +307,10 @@ const EPG = {
 
             zap.on('exit', () => {
                 clearTimeout(timeout);
+                try {
+                    if (require('fs').existsSync(tempConf)) require('fs').unlinkSync(tempConf);
+                } catch (e) { /* ignore cleanup error */ }
+
                 const count = this.parseEIT(buffer);
                 console.log(`[EPG] Mux scan finished. Discovered ${count} program entries.`);
                 resolve();
@@ -368,12 +363,6 @@ const EPG = {
 
                 const tableId = sectionStart[0];
 
-                // Verbose: Log every ATSC table found
-                if (tableId >= 0xC7 && tableId <= 0xCF) {
-                    console.log(`[EPG Verbose] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid} (Section Len: ${sectionStart.length})`);
-                    tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
-                }
-
                 // Debug log for first few table IDs found
                 if (programCount === 0 && sections.size < 5) {
                     console.log(`[EPG] Found Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid}`);
@@ -383,7 +372,6 @@ const EPG = {
                 // Support DVB EIT (0x4E-0x6F) and ATSC PSIP Tables (0xC7-0xCF)
                 // 0xC7: MGT, 0xC8/C9: VCT, 0xCB: EIT-0, 0xCC: EIT-1...
                 if (tableId === 0xC8 || tableId === 0xC9) {
-                    console.log(`[EPG Verbose] Processing VCT Table 0x${tableId.toString(16)}`);
                     this.parseATSCVCT(sectionStart);
                 } else if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
                     // console.log(`[EPG Verbose] Processing EIT Table 0x${tableId.toString(16)}`); // Can be very spammy
@@ -443,8 +431,6 @@ const EPG = {
                 // Bytes 28-29: Source ID
                 const sourceId = (section[offset + 28] << 8) | section[offset + 29];
 
-                console.log(`[ATSC VCT Verbose] Channel ${i}: Major=${major}, Minor=${minor}, Program=${programNumber}, SourceID=${sourceId}`);
-
                 if (sourceId && programNumber) {
                     if (!this.sourceMap.has(sourceId)) {
                         console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Program ${programNumber} (${major}.${minor})`);
@@ -483,13 +469,11 @@ const EPG = {
             for (let i = 0; i < numEvents; i++) {
                 // Check if enough bytes remain for event_id, start_time, duration, title_length
                 if (offset + 10 > sectionLength + 3) {
-                    console.log(`[EPG Verbose] Section too short for event at index ${i}`);
                     break;
                 }
 
                 const eventId = (section[offset] << 8) | section[offset + 1];
                 const startTimeGPS = section.readUInt32BE(offset + 2);
-                console.log(`[EPG Verbose] Event ${eventId}: StartGPS=${startTimeGPS}`);
                 // length_in_seconds is 22 bits, ETM_location is 2 bits.
                 const duration = ((section[offset + 6] & 0x3F) << 16) | (section[offset + 7] << 8) | section[offset + 8]; // Mask out ETM_location
                 const titleLength = section[offset + 9];
@@ -550,11 +534,11 @@ const EPG = {
                 if (title && startTime > 0) {
                     onFound();
                     const serviceId = this.sourceMap.get(sourceId) || sourceId.toString();
-                    console.log(`[ATSC EPG] INSERTING: "${title}" for Source ID: ${sourceId} -> Service ID: ${serviceId} (Starts: ${new Date(startTime).toISOString()})`);
+                    // console.log(`[ATSC EPG] INSERTING: "${title}" for Source ID: ${sourceId} -> Service ID: ${serviceId}`);
                     db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [serviceId, startTime, endTime, title, description]);
                 } else {
-                    console.log(`[EPG Verbose] Skipped event. Title: "${title}", Start: ${startTime}`);
+                    // console.log(`[EPG Verbose] Skipped event. Title: "${title}", Start: ${startTime}`);
                 }
 
                 offset = currentEventOffset; // Move to the start of the next event
