@@ -320,7 +320,7 @@ const EPG = {
                 console.log(`[EPG] Scanning mux at ${freq} Hz using ${channelName} on Tuner ${tuner.id}...`);
 
                 try {
-                    await this.scanMux(tuner, channelName);
+                    await this.scanMux(tuner, channelName, freq);
                 } catch (e) {
                     console.error(`[EPG] Error scanning mux at ${freq}:`, e);
                 }
@@ -341,7 +341,7 @@ const EPG = {
         }
     },
 
-    scanMux(tuner, channelName) {
+    scanMux(tuner, channelName, freq) {
         return new Promise((resolve) => {
             const args = [
                 '-c', CHANNELS_CONF,
@@ -383,18 +383,18 @@ const EPG = {
                 clearTimeout(timeout);
 
 
-                const count = this.parseEIT(buffer);
+                const count = this.parseEIT(buffer, freq);
                 console.log(`[EPG] Mux scan finished. Discovered ${count} program entries.`);
                 resolve();
             });
         });
     },
 
-    parseEIT(buffer) {
+    parseEIT(buffer, freq) {
         const stats = { count: 0 };
         const sections = new Map();
 
-        debugLog(`[EPG] Beginning parse of ${buffer.length} bytes...`);
+        debugLog(`[EPG] Beginning parse of ${buffer.length} bytes for frequency ${freq}...`);
         const pidCounts = new Map();
         const tableCounts = new Map();
 
@@ -420,7 +420,7 @@ const EPG = {
                     const sectionLen = ((sectionStart[1] & 0x0F) << 8) | sectionStart[2];
                     const totalLen = sectionLen + 3;
                     if (sectionStart.length >= totalLen) {
-                        this.handleCompleteSection(sectionStart.slice(0, totalLen), pid, stats, tableCounts, sections);
+                        this.handleCompleteSection(sectionStart.slice(0, totalLen), pid, stats, tableCounts, sections, freq);
                     } else {
                         this.sectionBuffers.set(pid, { buffer: sectionStart, totalLength: totalLen });
                     }
@@ -430,7 +430,7 @@ const EPG = {
                 if (state) {
                     state.buffer = Buffer.concat([state.buffer, payload]);
                     if (state.buffer.length >= state.totalLength) {
-                        this.handleCompleteSection(state.buffer.slice(0, state.totalLength), pid, stats, tableCounts, sections);
+                        this.handleCompleteSection(state.buffer.slice(0, state.totalLength), pid, stats, tableCounts, sections, freq);
                         this.sectionBuffers.delete(pid);
                     }
                 }
@@ -450,21 +450,21 @@ const EPG = {
         return stats.count;
     },
 
-    handleCompleteSection(section, pid, stats, tableCounts, sections) {
+    handleCompleteSection(section, pid, stats, tableCounts, sections, freq) {
         const tableId = section[0];
         if (tableId >= 0xC7 && tableId <= 0xCF) {
             tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
         }
 
         if (tableId === 0xC8 || tableId === 0xC9) {
-            this.parseATSCVCT(section);
+            this.parseATSCVCT(section, freq);
         } else if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
             const id = (section[3] << 8) | section[4];
-            this.parseEITSection(section, id, () => { stats.count++; });
+            this.parseEITSection(section, id, () => { stats.count++; }, freq);
         }
     },
 
-    parseEITSection(section, id, onFound) {
+    parseEITSection(section, id, onFound, freq) {
         const tableId = section[0];
         const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
         if (section.length < sectionLength + 3) return;
@@ -478,42 +478,40 @@ const EPG = {
         }
     },
 
-    parseATSCVCT(section) {
+    parseATSCVCT(section, freq) {
         try {
             const sectionLength = ((section[1] & 0x0F) << 8) | section[2];
             const numChannels = section[9];
             let offset = 10;
 
             for (let i = 0; i < numChannels; i++) {
-                if (offset + 32 > sectionLength + 3) {
-                    console.log(`[ATSC VCT] Section too short for channel at index ${i}`);
-                    break;
-                }
-                // Channel name is 14 bytes (UTF-16)
-                // Bytes 14-15: Major Channel
-                const major = ((section[offset + 14] & 0x0F) << 6) | (section[offset + 15] >> 2);
-                const minor = ((section[offset + 15] & 0x03) << 8) | section[offset + 16];
+                if (offset + 32 > sectionLength + 3) break;
 
-                // Bytes 18-21: Carrier Freq
-                // Bytes 22-23: Channel TSID
-                // Bytes 24-25: Program Number
                 const programNumber = (section[offset + 24] << 8) | section[offset + 25];
-
-                // Bytes 28-29: Source ID
                 const sourceId = (section[offset + 28] << 8) | section[offset + 29];
 
                 if (sourceId) {
-                    const virtualChannel = `${major}.${minor}`;
-                    if (!this.sourceMap.has(sourceId)) {
-                        console.log(`[ATSC VCT] Mapped Source ID ${sourceId} -> Virtual ${virtualChannel}`);
-                        this.sourceMap.set(sourceId, virtualChannel);
+                    // Find matching channel in our config (by freq and programNumber)
+                    const channel = CHANNELS.find(c => c.frequency == freq && c.serviceId == programNumber.toString());
+
+                    if (channel) {
+                        if (this.sourceMap.get(sourceId) !== channel.number) {
+                            debugLog(`[ATSC VCT] Verified Map: Source ${sourceId} -> ${channel.name} (${channel.number})`);
+                            this.sourceMap.set(sourceId, channel.number);
+                        }
+                    } else {
+                        // Fallback: Use major.minor from broadcast if we don't have this channel on this mux
+                        const major = ((section[offset + 14] & 0x0F) << 6) | (section[offset + 15] >> 2);
+                        const minor = ((section[offset + 15] & 0x03) << 8) | section[offset + 16];
+                        const virtualChannel = `${major}.${minor}`;
+                        if (!this.sourceMap.has(sourceId)) {
+                            this.sourceMap.set(sourceId, virtualChannel);
+                        }
                     }
                 }
-
                 const descriptorsLength = ((section[offset + 30] & 0x03) << 8) | section[offset + 31];
                 offset += 32 + descriptorsLength;
             }
-            debugLog(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
         } catch (e) {
             console.error('[ATSC VCT] Error:', e);
         }
