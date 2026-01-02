@@ -81,5 +81,32 @@ The parser handles Multi-String Structure (MSS) titles and correctly handles GPS
 ### Channel Disambiguation
 If your `channels.conf` has multiple sections named `[Bounce]`, the app will automatically rename them to `[Bounce 55.1]`, `[Bounce 55.2]`, etc., and save the changes back to the file to ensure reliable tuning.
 
+## 🔧 Troubleshooting
+
+### Clearing Jellyfin EPG Cache
+If you update your `channels.conf` or notice your guide is stale/incorrect in Jellyfin, you may need to clear Jellyfin's internal XMLTV cache. Jellyfin sometimes caches the XML structure even if the file on disk has changed.
+
+1. **Stop Jellyfin Server**:
+   ```bash
+   sudo systemctl stop jellyfin
+   ```
+
+2. **Delete the Cache Directories**:
+   - **Native Linux (Debian/Ubuntu)**:
+     ```bash
+     sudo rm -rf /var/cache/jellyfin/xmltv/
+     sudo rm -rf /var/cache/jellyfin/*_channels
+     ```
+   - **Docker**:
+     Locate your mapped `cache` volume and delete the `xmltv` folder within it.
+
+3. **Start Jellyfin Server**:
+   ```bash
+   sudo systemctl start jellyfin
+   ```
+
+4. **Refresh Guide Data**:
+   In the Jellyfin Dashboard, go to **Live TV** and click **Refresh Guide Data**.
+
 ## 📄 License
 ISC
