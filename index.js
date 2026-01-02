@@ -890,19 +890,21 @@ app.get('/xmltv.xml', (req, res) => {
 
         // Programs
         rows.forEach(p => {
-            // Find channel by number (which we now store in channel_service_id for ATSC)
-            const channel = CHANNELS.find(c => c.number === p.channel_service_id || c.serviceId === p.channel_service_id);
-            if (!channel) {
-                // console.warn(`[XMLTV Debug] Orphaned program for Service ID ${p.channel_service_id} (No matching channel config)`);
-                return;
-            }
+            // Find channel using both frequency and ID to avoid mux collisions
+            const channel = CHANNELS.find(c => {
+                const freqMatch = !p.frequency || p.frequency === 'unknown' || c.frequency === p.frequency;
+                const idMatch = c.number === p.channel_service_id || c.serviceId === p.channel_service_id;
+                return freqMatch && idMatch;
+            });
+
+            if (!channel) return;
 
             const start = formatXmltvDate(p.start_time);
             const end = formatXmltvDate(p.end_time);
 
             xml += `  <programme start="${start}" stop="${end}" channel="${channel.number}">\n`;
             xml += `    <title lang="en">${escapeXml(p.title)}</title>\n`;
-            xml += `    <desc lang="en">${escapeXml(p.description)}</desc>\n`;
+            if (p.description) xml += `    <desc lang="en">${escapeXml(p.description)}</desc>\n`;
             xml += '  </programme>\n';
         });
 
