@@ -698,8 +698,8 @@ app.get('/xmltv.xml', (req, res) => {
                 return;
             }
 
-            const start = new Date(p.start_time).toISOString().replace(/[-:]/g, '').split('.')[0] + ' +0000';
-            const end = new Date(p.end_time).toISOString().replace(/[-:]/g, '').split('.')[0] + ' +0000';
+            const start = new Date(p.start_time).toISOString().replace(/[-:T]/g, '').split('.')[0] + ' +0000';
+            const end = new Date(p.end_time).toISOString().replace(/[-:T]/g, '').split('.')[0] + ' +0000';
 
             xml += `  <programme start="${start}" stop="${end}" channel="${channel.number}">\n`;
             xml += `    <title lang="en">${escapeXml(p.title)}</title>\n`;
