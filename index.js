@@ -259,7 +259,22 @@ app.get('/stream/:channelNum', async (req, res) => {
     tuner.processes.ffmpeg = ffmpeg;
 
     // Pipe zap stdout -> ffmpeg stdin
-    zap.stdout.pipe(ffmpeg.stdin);
+    // Handle EPIPE on ffmpeg stdin (e.g. if ffmpeg fails to start or dies)
+    ffmpeg.stdin.on('error', (err) => {
+        if (err.code !== 'EPIPE') {
+            console.error(`FFmpeg stdin error [Tuner ${tuner.id}]:`, err);
+        }
+    });
+
+    zap.stdout.pipe(ffmpeg.stdin).on('error', (err) => {
+        console.warn(`Zap stdout pipe error [Tuner ${tuner.id}]:`, err);
+        cleanup();
+    });
+
+    res.on('error', (err) => {
+        console.warn(`Response socket error [Tuner ${tuner.id}]:`, err);
+        cleanup();
+    });
 
     res.writeHead(200, {
         'Content-Type': 'video/mp2t',
