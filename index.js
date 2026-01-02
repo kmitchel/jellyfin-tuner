@@ -296,6 +296,7 @@ const EPG = {
         let sections = new Map(); // Track sections by PID and TableID to reassemble
 
         console.log(`[EPG] Beginning parse of ${buffer.length} bytes...`);
+        const pidCounts = new Map();
 
         for (let i = 0; i < buffer.length - 188; i += 188) {
             if (buffer[i] !== 0x47) {
@@ -306,7 +307,13 @@ const EPG = {
             }
 
             const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2];
-            // Allow DVB EPG (18) or ATSC PSIP (8187)
+
+            // Track relevant PIDs for debugging
+            if (pid === 18 || pid === 8187) {
+                pidCounts.set(pid, (pidCounts.get(pid) || 0) + 1);
+            }
+
+            // Allow DVB EIT (18) or ATSC PSIP (8187)
             if (pid !== 18 && pid !== 8187) continue;
 
             const pusi = buffer[i + 1] & 0x40;
@@ -325,6 +332,13 @@ const EPG = {
                 if (sectionStart.length < 3) continue;
 
                 const tableId = sectionStart[0];
+
+                // Debug log for first few table IDs found
+                if (programCount === 0 && sections.size < 5) {
+                    console.log(`[EPG] Found Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid}`);
+                    sections.set(tableId, true); // misuse map just to limit logs
+                }
+
                 // Support DVB EIT (0x4E-0x6F) and ATSC PSIP Tables (0xC7-0xCF)
                 // 0xC7: MGT, 0xC8/C9: VCT, 0xCB: EIT-0, 0xCC: EIT-1...
                 if (tableId === 0xC8 || tableId === 0xC9) {
@@ -335,6 +349,8 @@ const EPG = {
                 }
             }
         }
+
+        console.log('[EPG] Packet summary:', Object.fromEntries(pidCounts));
         return programCount;
     },
 
@@ -376,6 +392,7 @@ const EPG = {
                 const descriptorsLength = ((section[offset + 30] & 0x0F) << 8) | section[offset + 31];
                 offset += 32 + descriptorsLength;
             }
+            console.log(`[ATSC VCT] Parsed ${numChannels} channels. Source Map size: ${this.sourceMap.size}`);
         } catch (e) {
             console.error('[ATSC VCT] Error:', e);
         }
@@ -453,22 +470,30 @@ const EPG = {
                         // Here you would parse descriptors for description if needed.
                         // For now, we just advance the offset.
                         currentEventOffset += descriptorsLength;
+                    } else {
+                        console.warn(`[ATSC EPG] Descriptors length ${descriptorsLength} exceeds section boundary at offset ${currentEventOffset}. Skipping descriptors.`);
+                        currentEventOffset = section.length; // Advance to end of section to prevent out-of-bounds
                     }
+                } else {
+                    console.warn(`[ATSC EPG] Not enough bytes for descriptors_length field at offset ${currentEventOffset}.`);
                 }
-
-                if (title && startTime > 0) {
-                    onFound();
-                    console.log(`[ATSC EPG] Parsed: "${title}" for Source ID: ${sourceId}`);
-                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
-                        [sourceId.toString(), startTime, endTime, title, description]); // Description is empty for now
-                }
-
-                offset = currentEventOffset; // Move to the start of the next event
             }
-        } catch (e) {
-            console.error('[ATSC EPG] Error:', e);
+
+            if (title && startTime > 0) {
+                onFound();
+                console.log(`[ATSC EPG] Parsed: "${title}" for Source ID: ${serviceId}`);
+                db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                    [serviceId.toString(), startTime, endTime, title, description]); // Description is empty for now
+            } else {
+                // console.log(`[ATSC EPG] Skipped event. Title: "${title}", Start: ${startTime}`);
+            }
+
+            offset = currentEventOffset; // Move to the start of the next event
         }
-    },
+        } catch(e) {
+        console.error('[ATSC EPG] Error:', e);
+    }
+},
 
     parseDVBEIT(section, serviceId, onFound) {
         try {
