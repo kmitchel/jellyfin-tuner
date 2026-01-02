@@ -363,10 +363,10 @@ const EPG = {
 
                 const tableId = sectionStart[0];
 
-                // Debug log for first few table IDs found
-                if (programCount === 0 && sections.size < 5) {
-                    console.log(`[EPG] Found Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid}`);
-                    sections.set(tableId, true); // misuse map just to limit logs
+                // Verbose: Log every ATSC table found
+                if (tableId >= 0xC7 && tableId <= 0xCF) {
+                    console.log(`[EPG Verbose] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid} (Section Len: ${sectionStart.length})`);
+                    tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
                 }
 
                 // Support DVB EIT (0x4E-0x6F) and ATSC PSIP Tables (0xC7-0xCF)
@@ -460,6 +460,7 @@ const EPG = {
             // section[8] protocol_version
             // section[9] num_events_in_section
             const numEvents = section[9];
+            console.log(`[ATSC EIT Verbose] Header: SourceID=${sourceId}, NumEvents=${numEvents}`);
             let offset = 10; // Start of event loop
 
             if (numEvents > 0) {
@@ -494,6 +495,7 @@ const EPG = {
                     let titleBuffer = section.slice(currentEventOffset, currentEventOffset + titleLength);
                     if (titleBuffer.length > 0) {
                         const numStrings = titleBuffer[0];
+                        // console.log(`[ATSC EIT Verbose] Event ${i} MSS: NumStrings=${numStrings}, Hex=${titleBuffer.toString('hex')}`);
                         let stringOffset = 1;
                         if (numStrings > 0 && titleBuffer.length >= stringOffset + 4) { // At least one string header (lang + len)
                             // const langCode = titleBuffer.slice(stringOffset, stringOffset + 3).toString('ascii');
@@ -502,6 +504,7 @@ const EPG = {
                                 title = titleBuffer.slice(stringOffset + 4, stringOffset + 4 + stringLen).toString('utf8');
                                 // Remove null bytes and other control chars that break XML
                                 title = title.replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, '').trim();
+                                console.log(`[ATSC EIT Verbose] Extracted Title: '${title}'`);
                             }
                         }
                     }
