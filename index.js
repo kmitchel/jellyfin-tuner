@@ -257,9 +257,9 @@ const EPG = {
         return new Promise((resolve) => {
             const zap = spawn('dvbv5-zap', [
                 '-c', CHANNELS_CONF,
-                '-r', // Capture all PIDs (required for ATSC dynamic EIT)
-                '-P', '0:8187', // Force capture of PAT and ATSC Base PID to ensure we get tables
                 '-a', tuner.id,
+                '-P', '0:8187', // 0=PAT, 8187=ATSC Base. No '-r' allows explicit PIDs to work better on some drivers.
+                '-t', '15',     // Timeout in tool itself
                 '-o', '-',
                 channelName
             ]);
@@ -278,10 +278,14 @@ const EPG = {
                 }
             });
 
+            zap.stderr.on('data', (d) => {
+                // console.log(`[EPG Debug] Zap stderr: ${d.toString()}`);
+            });
+
             const timeout = setTimeout(() => {
-                if (!dataReceived) console.warn(`[EPG] No data received for ${channelName} after 5s. Signal might be weak.`);
+                if (!dataReceived) console.warn(`[EPG] No data received for ${channelName} after 15s. Signal might be weak.`);
                 zap.kill('SIGKILL');
-            }, 10000); // 10s per mux (fast scan)
+            }, 15000); // 15s per mux
 
             zap.on('exit', () => {
                 clearTimeout(timeout);
