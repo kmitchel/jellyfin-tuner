@@ -65,34 +65,63 @@ sudo apt install v4l-utils ffmpeg nodejs npm sqlite3
    sudo chown jellyfin:jellyfin logos.json
    ```
 
-## ⚙️ Systemd Service Setup
+## ⚙️ Systemd Service & Permissions
 
-Running the application with `sudo` is discouraged. Instead, use the provided systemd unit to run it as the `jellyfin` user.
+Running the application with `sudo` is discouraged for security reasons. Follow these steps to run the tuner as the `jellyfin` user.
 
-1. Ensure the `jellyfin` user has access to DVB devices:
-   ```bash
-   sudo usermod -aG video,render jellyfin
-   ```
+### 1. Configure User Permissions
+The `jellyfin` user needs access to the application files, the DVB hardware, and the Intel GPU (for QSV).
 
-2. Copy the service file:
-   ```bash
-   sudo cp express-m3u-tuner.service /etc/systemd/system/
-   ```
+```bash
+# Set ownership of the application directory
+sudo chown -R jellyfin:jellyfin /opt/express-m3u-tuner
 
-3. Reload systemd and enable the service:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now express-m3u-tuner
-   ```
+# Add jellyfin to the video and render groups for hardware access
+sudo usermod -aG video,render jellyfin
+```
 
-4. Check status:
-   ```bash
-   sudo systemctl status express-m3u-tuner
-   ```
+### 2. Create the Systemd Service
+If you haven't already, create the service file at `/etc/systemd/system/express-m3u-tuner.service`. You can use the provided file or create it manually:
+
+```bash
+sudo nano /etc/systemd/system/express-m3u-tuner.service
+```
+
+**Service File Content:**
+```ini
+[Unit]
+Description=Express M3U Tuner Service
+After=network.target
+
+[Service]
+Type=simple
+User=jellyfin
+Group=jellyfin
+WorkingDirectory=/opt/express-m3u-tuner
+ExecStart=/usr/bin/node index.js
+Restart=always
+
+# Access to DVB and GPU hardware
+SupplementaryGroups=video render
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 3. Enable and Start
+```bash
+# Reload systemd to recognize the new service
+sudo systemctl daemon-reload
+
+# Enable (start on boot) and start the service now
+sudo systemctl enable --now express-m3u-tuner
+
+# Verify it is running
+sudo systemctl status express-m3u-tuner
+```
 
 ## 🚦 Usage
-
-Once the service is running, the server is available on port `3000` (by default) and will automatically restart on failure or reboot.
+Once the service is active, the server is available on port `3000` (default). It will automatically restart if it crashes or the system reboots.
 
 ### Environment Variables
 
