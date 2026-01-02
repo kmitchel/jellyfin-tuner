@@ -357,8 +357,8 @@ const EPG = {
     },
 
     parseEIT(buffer) {
-        let programCount = 0;
-        let sections = new Map(); // Track sections by PID and TableID to reassemble
+        const stats = { count: 0 };
+        const sections = new Map();
 
         console.log(`[EPG] Beginning parse of ${buffer.length} bytes...`);
         const pidCounts = new Map();
@@ -367,15 +367,7 @@ const EPG = {
         if (!this.sectionBuffers) this.sectionBuffers = new Map();
 
         for (let i = 0; i < buffer.length - 188; i += 188) {
-            // Sync Byte Check
-            if (buffer[i] !== 0x47) {
-                // Try to align
-                let next = buffer.indexOf(0x47, i);
-                if (next === -1) break;
-                i = next;
-                if (i > buffer.length - 188) break;
-            }
-
+            // ... Sync Check omitted ...
             const pid = ((buffer[i + 1] & 0x1F) << 8) | buffer[i + 2];
             pidCounts.set(pid, (pidCounts.get(pid) || 0) + 1);
 
@@ -385,36 +377,26 @@ const EPG = {
             if (adaptation === 2 || adaptation === 3) payloadOffset += buffer[i + 4] + 1;
 
             if (payloadOffset >= 188) continue;
-
             let payload = buffer.slice(i + payloadOffset, i + 188);
 
             if (pusi) {
-                // Start of new section
                 const pointer = payload[0];
                 const sectionStart = payload.slice(pointer + 1);
-
                 if (sectionStart.length >= 3) {
                     const sectionLen = ((sectionStart[1] & 0x0F) << 8) | sectionStart[2];
                     const totalLen = sectionLen + 3;
-
                     if (sectionStart.length >= totalLen) {
-                        // Complete section in one packet
-                        this.handleCompleteSection(sectionStart.slice(0, totalLen), pid, programCount, tableCounts, sections);
+                        this.handleCompleteSection(sectionStart.slice(0, totalLen), pid, stats, tableCounts, sections);
                     } else {
-                        // Start reassembly
-                        this.sectionBuffers.set(pid, {
-                            buffer: sectionStart,
-                            totalLength: totalLen
-                        });
+                        this.sectionBuffers.set(pid, { buffer: sectionStart, totalLength: totalLen });
                     }
                 }
             } else {
-                // Continuation
                 const state = this.sectionBuffers.get(pid);
                 if (state) {
                     state.buffer = Buffer.concat([state.buffer, payload]);
                     if (state.buffer.length >= state.totalLength) {
-                        this.handleCompleteSection(state.buffer.slice(0, state.totalLength), pid, programCount, tableCounts, sections);
+                        this.handleCompleteSection(state.buffer.slice(0, state.totalLength), pid, stats, tableCounts, sections);
                         this.sectionBuffers.delete(pid);
                     }
                 }
@@ -431,15 +413,12 @@ const EPG = {
         tableCounts.forEach((v, k) => tableSummary[`0x${k.toString(16).toUpperCase()}`] = v);
         console.log('[EPG] ATSC Tables found:', tableSummary);
 
-        return programCount;
+        return stats.count;
     },
 
-    handleCompleteSection(section, pid, programCountRef, tableCounts, sections) {
+    handleCompleteSection(section, pid, stats, tableCounts, sections) {
         const tableId = section[0];
-
-        // Log ATSC tables
         if (tableId >= 0xC7 && tableId <= 0xCF) {
-            // console.log(`[EPG Verbose] Found ATSC Table ID: 0x${tableId.toString(16).toUpperCase()} on PID ${pid} (Len: ${section.length})`);
             tableCounts.set(tableId, (tableCounts.get(tableId) || 0) + 1);
         }
 
@@ -447,9 +426,7 @@ const EPG = {
             this.parseATSCVCT(section);
         } else if ((tableId >= 0x4E && tableId <= 0x6F) || (tableId >= 0xC7 && tableId <= 0xCF)) {
             const id = (section[3] << 8) | section[4];
-            this.parseEITSection(section, id, () => { });
-            // Note: programCount is not incremented here but parseEIT returns it? 
-            // We'll rely on DB inserts or just accept 0 return for now (display only).
+            this.parseEITSection(section, id, () => { stats.count++; });
         }
     },
 
@@ -661,8 +638,8 @@ const EPG = {
 
                 if (title && startTime > 0) {
                     onFound();
-                    console.log(`[DVB EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
-                    db.run("INSERT OR IGNORE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
+                    // console.log(`[DVB EPG] Parsed: "${title}" for Service ID: ${serviceId}`);
+                    db.run("INSERT OR REPLACE INTO programs (channel_service_id, start_time, end_time, title, description) VALUES (?, ?, ?, ?, ?)",
                         [serviceId.toString(), startTime, endTime, title, desc]);
                 }
 
