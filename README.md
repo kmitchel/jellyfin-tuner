@@ -9,7 +9,8 @@ A high-performance ExpressJS server for turning your USB DVB/ATSC tuners into a 
 - **Smart Mapping**: Automatically maps ATSC Source IDs to Virtual Channel numbers (e.g., 55.1).
 - **XMLTV Excellence**: Generates standard XMLTV files with local timezone support and proper entity escaping (no more "Rizzoli & Isles" ampersand crashes).
 - **Smart Disambiguation**: Tunes using Virtual Channel numbers instead of section names, allowing multiple channels with the same name (e.g., "Bounce") to coexist without conflict.
-- **Hardware Acceleration**: Support for Intel QSV hardware transcoding to reduce CPU load.
+- **Hardware & Software Transcoding**: Robust support for Intel **QSV**, NVIDIA **NVENC**, and **VA-API** hardware acceleration, plus specialized software transcoding.
+- **Multiple Codecs**: Choice of **H.264**, **H.265 (HEVC)**, or **AV1** output for any transcoding mode.
 - **Smart Scanning**: Only runs a full EPG scan on startup if the database is missing; otherwise refreshes every 15 minutes.
 - **Round-Robin Preemption**: Distributes tuner load and supports preemption logic.
 
@@ -116,6 +117,8 @@ Restart=always
 
 # Transcoding mode: none (direct copy), soft, qsv, nvenc, vaapi
 Environment=TRANSCODE_MODE=none
+
+# Video codec: h264, h265, av1
 Environment=TRANSCODE_CODEC=h264
 Environment=ENABLE_EPG=true
 
@@ -152,6 +155,9 @@ Once the service is active, the server is available on port `3000` (default). It
 | `ENABLE_PREEMPTION` | Allow tuners to be stolen | `false` |
 | `ENABLE_EPG` | Enable EPG scanning | `true` |
 | `VERBOSE_LOGGING` | Enable deep debug logs | `false` |
+
+> [!NOTE]
+> When `TRANSCODE_CODEC=av1` is selected, the stream automatically switches from the MPEG-TS container to **Matroska (.mkv)** for compatibility.
 
 ## 🐳 Docker Deployment
 
@@ -198,7 +204,8 @@ services:
       - /dev/dvb:/dev/dvb
       - /dev/dri:/dev/dri # Pass through the Intel GPU
     environment:
-      - ENABLE_QSV=true
+      - TRANSCODE_MODE=qsv
+      - TRANSCODE_CODEC=h264
 ```
 
 #### 2. Manual Docker Run with GPU
@@ -208,7 +215,8 @@ docker run -d \
   --privileged \
   --network host \
   --device /dev/dri:/dev/dri \
-  -e ENABLE_QSV=true \
+  -e TRANSCODE_MODE=qsv \
+  -e TRANSCODE_CODEC=h264 \
   -v $(pwd)/channels.conf:/app/channels.conf \
   -v $(pwd)/logos.json:/app/logos.json \
   -v $(pwd)/epg.db:/app/epg.db \
@@ -233,7 +241,8 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
-      - ENABLE_NVENC=true
+      - TRANSCODE_MODE=nvenc
+      - TRANSCODE_CODEC=h264
 ```
 
 #### 2. Manual Docker Run with NVIDIA GPU
@@ -243,12 +252,30 @@ docker run -d \
   --privileged \
   --network host \
   --gpus all \
-  -e ENABLE_NVENC=true \
+  -e TRANSCODE_MODE=nvenc \
+  -e TRANSCODE_CODEC=h264 \
   -v $(pwd)/channels.conf:/app/channels.conf \
   -v $(pwd)/logos.json:/app/logos.json \
   -v $(pwd)/epg.db:/app/epg.db \
   -v /dev/dvb:/dev/dvb \
   express-m3u-tuner
+```
+
+### 🎮 Hardware Acceleration (VA-API)
+
+VA-API is the standard for hardware acceleration on Linux for AMD and Intel GPUs.
+
+#### 1. Update `docker-compose.yml`
+```yaml
+services:
+  tuner:
+    # ... other config ...
+    devices:
+      - /dev/dvb:/dev/dvb
+      - /dev/dri:/dev/dri # Pass through the rendering device
+    environment:
+      - TRANSCODE_MODE=vaapi
+      - TRANSCODE_CODEC=h264
 ```
 
 ## 🔗 Endpoints
