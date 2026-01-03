@@ -21,9 +21,9 @@ if (ENABLE_EPG) {
         // Deep scan (30s per mux)
         setTimeout(() => EPG.grab(30000), 2000);
     } else {
-        // If DB exists, still run a quick scan after a short delay
+        // If DB exists, we are ready immediately. Periodic background scan will update data later.
+        console.log('Database found, skipping initial EPG scan.');
         EPG.isInitialScanDone = true;
-        setTimeout(() => EPG.grab(20000), 5000);
     }
 } else {
     console.log('EPG scanning is disabled.');
