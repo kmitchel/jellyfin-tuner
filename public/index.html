@@ -871,6 +871,18 @@
 
         function launchPlayer(url, title, isLiveStream = false) {
             const video = document.getElementById('videoElement');
+
+            // Clean up existing player first
+            if (tsPlayer) {
+                try {
+                    tsPlayer.pause();
+                    tsPlayer.unload();
+                    tsPlayer.detachMediaElement();
+                    tsPlayer.destroy();
+                } catch (e) { }
+                tsPlayer = null;
+            }
+
             document.getElementById('v-title').textContent = title;
             document.getElementById('player-overlay').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -882,19 +894,44 @@
                     tsPlayer = mpegts.createPlayer({
                         type: 'mse',
                         isLive: isLiveStream,
-                        url: url + (isLiveStream ? '?t=' + Date.now() : '') // Cache buster for active files
+                        url: url + (isLiveStream ? '?t=' + Date.now() : '')
+                    }, {
+                        enableStashBuffer: !isLiveStream, // Optimization for recorded content
+                        stashInitialSize: 128
                     });
+
+                    tsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
+                        console.error('[Player Error]', type, detail, info);
+                        if (detail === mpegts.ErrorDetails.NETWORK_EXCEPTION) {
+                            console.warn('Network error, attempting to reload...');
+                        }
+                    });
+
                     tsPlayer.attachMediaElement(video);
-                    tsPlayer.load(); tsPlayer.play();
-                } else { video.src = url; video.play(); }
-            } else { video.src = url; video.play(); }
+                    tsPlayer.load();
+                    // Slight delay to ensure MSE is ready
+                    setTimeout(() => {
+                        if (tsPlayer) tsPlayer.play().catch(e => console.warn('Autoplay prevented or interrupted:', e));
+                    }, 100);
+                } else { video.src = url; video.play().catch(e => { }); }
+            } else { video.src = url; video.play().catch(e => { }); }
             closeDetails();
         }
 
         function closePlayer(isPopState = false) {
             const video = document.getElementById('videoElement');
-            if (tsPlayer) { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.destroy(); tsPlayer = null; }
-            video.pause(); video.src = ""; video.load();
+            if (tsPlayer) {
+                try {
+                    tsPlayer.pause();
+                    tsPlayer.unload();
+                    tsPlayer.detachMediaElement();
+                    tsPlayer.destroy();
+                } catch (e) { }
+                tsPlayer = null;
+            }
+            video.pause();
+            video.src = "";
+            try { video.load(); } catch (e) { }
             document.getElementById('player-overlay').style.display = 'none';
             document.body.style.overflow = 'auto';
             if (!isPopState && window.location.hash === '#player') history.back();
