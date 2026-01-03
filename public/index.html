@@ -765,21 +765,28 @@
         function playLive(num, name, title) {
             const f = document.getElementById('format-select').value;
             const c = document.getElementById('codec-select').value;
-            launchPlayer(`/stream/${encodeURIComponent(num)}/${f}/${c}`, `${num} ${name} - ${title}`);
+            launchPlayer(`/stream/${encodeURIComponent(num)}/${f}/${c}`, `${num} ${name} - ${title}`, true);
         }
 
-        function playFile(url, title) { launchPlayer(url, title); }
+        function playFile(url, title, isRecording = false) {
+            launchPlayer(url, title, isRecording);
+        }
 
-        function launchPlayer(url, title) {
+        function launchPlayer(url, title, isLiveStream = false) {
             const video = document.getElementById('videoElement');
             document.getElementById('v-title').textContent = title;
             document.getElementById('player-overlay').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            if (url.includes('.mkv') || url.includes('/stream/') && document.getElementById('format-select').value === 'ts') {
+            // MKV and TS files/streams use mpegts.js
+            if (url.includes('.mkv') || url.includes('/stream/')) {
                 if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
-                    tsPlayer = mpegts.createPlayer({ type: 'mse', isLive: url.includes('/stream/'), url: url });
+                    tsPlayer = mpegts.createPlayer({
+                        type: 'mse',
+                        isLive: isLiveStream,
+                        url: url + (isLiveStream ? '?t=' + Date.now() : '') // Cache buster for active files
+                    });
                     tsPlayer.attachMediaElement(video);
                     tsPlayer.load(); tsPlayer.play();
                 } else { video.src = url; video.play(); }
