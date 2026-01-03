@@ -530,7 +530,8 @@
                     const isActive = Date.now() >= p.start && Date.now() < p.end;
                     return `<div class="program-tile ${isActive ? 'active' : ''}" 
                                             style="left: ${left}px; width: ${width - 4}px"
-                                            onclick="showDetails('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">
+                                            onclick="showDetails('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', ${JSON.stringify(p).replace(/"/g, '&quot;')})"
+                                            ondblclick="play('${chan.number}', document.getElementById('format-select').value, document.getElementById('codec-select').value, '${chan.name.replace(/'/g, "\\'")}', '${p.title.replace(/'/g, "\\'")}')">
                                             <div class="prog-title">${p.title}</div>
                                             <div class="prog-time">${new Date(p.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
                                         </div>`;
