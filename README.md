@@ -189,94 +189,59 @@ docker run -d \
 
 **Note:** The `--privileged` flag and `--network host` are recommended for reliable access to DVB hardware and low-latency streaming.
 
-### 🎮 Hardware Acceleration (Intel QSV)
+### 🎮 Hardware Acceleration
 
-To enable Intel Quick Sync Video (QSV) inside Docker, you need to pass the GPU device to the container and set the appropriate environment variables.
+To use hardware transcoding in Docker, you must pass through your GPU hardware to the container.
 
-#### 1. Update `docker-compose.yml`
-Ensure your service includes the following:
+#### 🔹 Intel Quick Sync (QSV)
+Requires a `Gen 7` or newer Intel iGPU.
+- **Compose**:
+  ```yaml
+  devices:
+    - /dev/dri:/dev/dri
+  environment:
+    - TRANSCODE_MODE=qsv
+    - TRANSCODE_CODEC=h264
+  ```
+- **CLI**:
+  ```bash
+  docker run [...] --device /dev/dri:/dev/dri -e TRANSCODE_MODE=qsv -e TRANSCODE_CODEC=h264 express-m3u-tuner
+  ```
 
-```yaml
-services:
-  tuner:
-    # ... other config ...
-    devices:
-      - /dev/dvb:/dev/dvb
-      - /dev/dri:/dev/dri # Pass through the Intel GPU
-    environment:
-      - TRANSCODE_MODE=qsv
-      - TRANSCODE_CODEC=h264
-```
+#### 🔹 NVIDIA (NVENC)
+Requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+- **Compose**:
+  ```yaml
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+  environment:
+    - TRANSCODE_MODE=nvenc
+    - TRANSCODE_CODEC=h264
+  ```
+- **CLI**:
+  ```bash
+  docker run [...] --gpus all -e TRANSCODE_MODE=nvenc -e TRANSCODE_CODEC=h264 express-m3u-tuner
+  ```
 
-#### 2. Manual Docker Run with GPU
-```bash
-docker run -d \
-  --name express-m3u-tuner \
-  --privileged \
-  --network host \
-  --device /dev/dri:/dev/dri \
-  -e TRANSCODE_MODE=qsv \
-  -e TRANSCODE_CODEC=h264 \
-  -v $(pwd)/channels.conf:/app/channels.conf \
-  -v $(pwd)/logos.json:/app/logos.json \
-  -v $(pwd)/epg.db:/app/epg.db \
-  -v /dev/dvb:/dev/dvb \
-  express-m3u-tuner
-```
-
-### 🎮 Hardware Acceleration (NVIDIA NVENC)
-
-To enable NVIDIA NVENC inside Docker, you need the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed.
-
-#### 1. Update `docker-compose.yml`
-```yaml
-services:
-  tuner:
-    # ... other config ...
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    environment:
-      - TRANSCODE_MODE=nvenc
-      - TRANSCODE_CODEC=h264
-```
-
-#### 2. Manual Docker Run with NVIDIA GPU
-```bash
-docker run -d \
-  --name express-m3u-tuner \
-  --privileged \
-  --network host \
-  --gpus all \
-  -e TRANSCODE_MODE=nvenc \
-  -e TRANSCODE_CODEC=h264 \
-  -v $(pwd)/channels.conf:/app/channels.conf \
-  -v $(pwd)/logos.json:/app/logos.json \
-  -v $(pwd)/epg.db:/app/epg.db \
-  -v /dev/dvb:/dev/dvb \
-  express-m3u-tuner
-```
-
-### 🎮 Hardware Acceleration (VA-API)
-
-VA-API is the standard for hardware acceleration on Linux for AMD and Intel GPUs.
-
-#### 1. Update `docker-compose.yml`
-```yaml
-services:
-  tuner:
-    # ... other config ...
-    devices:
-      - /dev/dvb:/dev/dvb
-      - /dev/dri:/dev/dri # Pass through the rendering device
-    environment:
-      - TRANSCODE_MODE=vaapi
-      - TRANSCODE_CODEC=h264
-```
+#### 🔹 AMD/Intel (VA-API)
+The open standard for Linux. Useful if QSV isn't working or for AMD GPUs.
+- **Compose**:
+  ```yaml
+  devices:
+    - /dev/dri:/dev/dri
+  environment:
+    - TRANSCODE_MODE=vaapi
+    - TRANSCODE_CODEC=h264
+  ```
+- **CLI**:
+  ```bash
+  docker run [...] --device /dev/dri:/dev/dri -e TRANSCODE_MODE=vaapi -e TRANSCODE_CODEC=h264 express-m3u-tuner
+  ```
 
 ## 🔗 Endpoints
 
