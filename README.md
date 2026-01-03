@@ -12,6 +12,7 @@ A high-performance ExpressJS server for turning your USB DVB/ATSC tuners into a 
 - **Hardware & Software Transcoding**: Robust support for Intel **QSV**, NVIDIA **NVENC**, and **VA-API** hardware acceleration, plus specialized software transcoding.
 - **Multiple Codecs**: Choice of **H.264**, **H.265 (HEVC)**, or **AV1** output for any transcoding mode.
 - **Smart Scanning**: Only runs a full EPG scan on startup if the database is missing; otherwise refreshes every 15 minutes.
+- **Interactive Dashboard**: Modern web interface to view "Now Playing" status and launch streams directly.
 - **Round-Robin Preemption**: Distributes tuner load and supports preemption logic.
 
 ## 🛠️ Prerequisites

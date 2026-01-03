@@ -9,6 +9,9 @@ const { debugLog } = require('./lib/utils');
 
 const app = express();
 
+// Serve static files
+app.use(express.static('public'));
+
 // Set up routes
 setupRoutes(app);
 
