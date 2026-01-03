@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+epg.db
+channels.conf
+logos.json
+.git
+.gitignore
+Dockerfile
+.dockerignore
+express-m3u-tuner.service
+README.md

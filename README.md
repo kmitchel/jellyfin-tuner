@@ -139,6 +139,71 @@ Once the service is active, the server is available on port `3000` (default). It
 | `ENABLE_PREEMPTION` | Allow tuners to be stolen | `false` |
 | `VERBOSE_LOGGING` | Enable deep debug logs | `false` |
 
+## 🐳 Docker Deployment
+
+You can also run Express M3U Tuner using Docker, which simplifies dependency management.
+
+### 1. Build and Run with Docker Compose
+Ensuring your `channels.conf` is in the project root:
+
+```bash
+docker-compose up -d --build
+```
+
+### 2. Manual Docker Build & Run
+```bash
+# Build the image
+docker build -t express-m3u-tuner .
+
+# Run the container
+docker run -d \
+  --name express-m3u-tuner \
+  --privileged \
+  --network host \
+  -v $(pwd)/channels.conf:/app/channels.conf \
+  -v $(pwd)/logos.json:/app/logos.json \
+  -v $(pwd)/epg.db:/app/epg.db \
+  -v /dev/dvb:/dev/dvb \
+  express-m3u-tuner
+```
+
+**Note:** The `--privileged` flag and `--network host` are recommended for reliable access to DVB hardware and low-latency streaming.
+
+### 🎮 Hardware Acceleration (Intel QSV)
+
+To enable Intel Quick Sync Video (QSV) inside Docker, you need to pass the GPU device to the container and set the appropriate environment variables.
+
+#### 1. Update `docker-compose.yml`
+Ensure your service includes the following:
+
+```yaml
+services:
+  tuner:
+    # ... other config ...
+    devices:
+      - /dev/dvb:/dev/dvb
+      - /dev/dri:/dev/dri # Pass through the Intel GPU
+    environment:
+      - ENABLE_TRANSCODING=true
+      - ENABLE_QSV=true
+```
+
+#### 2. Manual Docker Run with GPU
+```bash
+docker run -d \
+  --name express-m3u-tuner \
+  --privileged \
+  --network host \
+  --device /dev/dri:/dev/dri \
+  -e ENABLE_TRANSCODING=true \
+  -e ENABLE_QSV=true \
+  -v $(pwd)/channels.conf:/app/channels.conf \
+  -v $(pwd)/logos.json:/app/logos.json \
+  -v $(pwd)/epg.db:/app/epg.db \
+  -v /dev/dvb:/dev/dvb \
+  express-m3u-tuner
+```
+
 ## 🔗 Endpoints
 
 - **Lineup**: `http://localhost:3000/lineup.m3u`

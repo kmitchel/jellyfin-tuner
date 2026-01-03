@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  tuner:
+    build: .
+    container_name: express-m3u-tuner
+    restart: unless-stopped
+    network_mode: host # Host mode is often better for DVB discovery and streaming performance
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./channels.conf:/app/channels.conf
+      - ./logos.json:/app/logos.json
+      - ./epg.db:/app/epg.db
+      - /dev/dvb:/dev/dvb # Pass through the tuner devices
+    devices:
+      - /dev/dvb:/dev/dvb
+      # Add /dev/dri if QSV is needed
+      # - /dev/dri:/dev/dri
+    environment:
+      - PORT=3000
+      - ENABLE_TRANSCODING=false
+      - ENABLE_QSV=false
+      - ENABLE_PREEMPTION=false
+      - VERBOSE_LOGGING=false
+    # Run as root inside container or map user ID if needed
+    # user: "1000:1000" 
+    privileged: true # Often required for direct hardware access, though --device /dev/dvb might suffice
