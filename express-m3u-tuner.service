@@ -10,7 +10,7 @@ WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
 
-# Transcoding mode: none (direct copy), soft, qsv, nvenc
+# Transcoding mode: none (direct copy), soft, qsv, nvenc, vaapi
 Environment=TRANSCODE_MODE=none
 Environment=ENABLE_EPG=true
 

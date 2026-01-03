@@ -114,7 +114,7 @@ WorkingDirectory=/opt/jellyfin-tuner
 ExecStart=/usr/bin/node index.js
 Restart=always
 
-# Transcoding mode: none (direct copy), soft, qsv, nvenc
+# Transcoding mode: none (direct copy), soft, qsv, nvenc, vaapi
 Environment=TRANSCODE_MODE=none
 Environment=ENABLE_EPG=true
 
@@ -146,7 +146,7 @@ Once the service is active, the server is available on port `3000` (default). It
 | :--- | :--- | :--- |
 | `PORT` | Server port | `3000` |
 | `CHANNELS_CONF` | Path to your channels file | `./channels.conf` |
-| `TRANSCODE_MODE` | Transcoding mode (`none`, `soft`, `qsv`, `nvenc`) | `none` |
+| `TRANSCODE_MODE` | Transcoding mode (`none`, `soft`, `qsv`, `nvenc`, `vaapi`) | `none` |
 | `ENABLE_PREEMPTION` | Allow tuners to be stolen | `false` |
 | `ENABLE_EPG` | Enable EPG scanning | `true` |
 | `VERBOSE_LOGGING` | Enable deep debug logs | `false` |
