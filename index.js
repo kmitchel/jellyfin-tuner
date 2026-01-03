@@ -1,14 +1,24 @@
 const express = require('express');
+const { execSync } = require('child_process');
 const { PORT, ENABLE_EPG } = require('./lib/config');
 const { dbExists } = require('./lib/db');
 const { TUNERS } = require('./lib/tuner');
 const EPG = require('./lib/epg');
 const { setupRoutes } = require('./lib/routes');
+const { debugLog } = require('./lib/utils');
 
 const app = express();
 
 // Set up routes
 setupRoutes(app);
+
+// Get build number (git commit count)
+let buildNumber = 'unknown';
+try {
+    buildNumber = execSync('git rev-list --count HEAD').toString().trim();
+} catch (e) {
+    debugLog('Could not determine build number from git');
+}
 
 if (ENABLE_EPG) {
     // Schedule EPG grab every 15 minutes with a shorter 15s-per-mux timeout for background updates
@@ -31,7 +41,7 @@ if (ENABLE_EPG) {
 }
 
 app.listen(PORT, () => {
-    console.log(`Tuner app listening at http://localhost:${PORT}`);
+    console.log(`Tuner app (Build ${buildNumber}) listening at http://localhost:${PORT}`);
 });
 
 // Global Cleanup on App Exit
