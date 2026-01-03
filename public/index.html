@@ -888,33 +888,56 @@
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            // TS and MKV files/streams use mpegts.js
-            if (url.includes('.ts') || url.includes('.mkv') || url.includes('/stream/')) {
-                if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
+            // TS files and /stream/ endpoints use mpegts.js
+            const useMpegts = url.includes('.ts') || url.includes('/stream/');
+
+            if (useMpegts && window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
+                try {
                     tsPlayer = mpegts.createPlayer({
-                        type: 'mse',
+                        type: 'mpegts',
                         isLive: isLiveStream,
                         url: url + (isLiveStream ? '?t=' + Date.now() : '')
                     }, {
-                        enableStashBuffer: !isLiveStream, // Optimization for recorded content
-                        stashInitialSize: 128
+                        enableStashBuffer: !isLiveStream,
+                        stashInitialSize: isLiveStream ? 128 : 512,
+                        liveBufferLatencyChasing: isLiveStream,
+                        autoCleanupSourceBuffer: true
                     });
 
                     tsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-                        console.error('[Player Error]', type, detail, info);
-                        if (detail === mpegts.ErrorDetails.NETWORK_EXCEPTION) {
-                            console.warn('Network error, attempting to reload...');
+                        console.error('[DVR Player Error]', type, detail, info);
+                        if (detail === mpegts.ErrorDetails.MEDIA_MSE_ERROR) {
+                            console.warn('MSE Error detected, falling back to native player...');
+                            closePlayer(true);
+                            video.src = url;
+                            video.play().catch(e => { });
                         }
                     });
 
                     tsPlayer.attachMediaElement(video);
                     tsPlayer.load();
-                    // Slight delay to ensure MSE is ready
+
+                    // Delay play slightly to allow MSE buffer to stabilize
                     setTimeout(() => {
-                        if (tsPlayer) tsPlayer.play().catch(e => console.warn('Autoplay prevented or interrupted:', e));
-                    }, 100);
-                } else { video.src = url; video.play().catch(e => { }); }
-            } else { video.src = url; video.play().catch(e => { }); }
+                        if (tsPlayer && tsPlayer.mediaElement) {
+                            tsPlayer.play().catch(e => {
+                                console.warn('Mpegts play failed, trying native...', e);
+                                video.src = url;
+                                video.play().catch(err => { });
+                            });
+                        }
+                    }, 200);
+                } catch (e) {
+                    console.error('Failed to init mpegts player:', e);
+                    video.src = url;
+                    video.play().catch(err => { });
+                }
+            } else {
+                video.src = url;
+                video.play().catch(e => {
+                    console.error('Native playback failed:', e);
+                });
+            }
             closeDetails();
         }
 
