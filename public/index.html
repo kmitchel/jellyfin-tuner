@@ -428,10 +428,30 @@
         }
 
         function closePlayer() {
-            if (tsPlayer) { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.destroy(); tsPlayer = null; }
+            const video = document.getElementById('videoElement');
+            if (tsPlayer) {
+                tsPlayer.pause();
+                tsPlayer.unload();
+                tsPlayer.detachMediaElement();
+                tsPlayer.destroy();
+                tsPlayer = null;
+            }
+
+            // Always stop the native video element and release resources
+            video.pause();
+            video.src = "";
+            video.load();
+
             document.getElementById('player-overlay').style.display = 'none';
             document.body.style.overflow = 'auto';
         }
+
+        // Close on Escape key
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('player-overlay').style.display === 'flex') {
+                closePlayer();
+            }
+        });
 
         function copy(path, e) {
             const url = window.location.origin + path;
