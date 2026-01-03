@@ -779,8 +779,8 @@
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            // MKV and TS files/streams use mpegts.js
-            if (url.includes('.mkv') || url.includes('/stream/')) {
+            // TS and MKV files/streams use mpegts.js
+            if (url.includes('.ts') || url.includes('.mkv') || url.includes('/stream/')) {
                 if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
                     tsPlayer = mpegts.createPlayer({
                         type: 'mse',
