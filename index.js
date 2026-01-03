@@ -9,6 +9,36 @@ const { debugLog } = require('./lib/utils');
 
 const app = express();
 
+// Block all requests until EPG scan is complete
+app.use((req, res, next) => {
+    if (!EPG.isInitialScanDone) {
+        res.set('Retry-After', '30');
+        return res.status(503).send(`
+            <html>
+                <head>
+                    <title>System Initializing</title>
+                    <meta http-equiv="refresh" content="10">
+                    <style>
+                        body { background: #020617; color: #f8fafc; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+                        .loader { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #38bdf8; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 2rem; }
+                        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        h1 { font-weight: 700; font-size: 2rem; margin: 0 0 1rem; color: #fff; }
+                        p { color: #94a3b8; font-size: 1.1rem; }
+                    </style>
+                </head>
+                <body>
+                    <div>
+                        <div class="loader"></div>
+                        <h1>Signal Acquisition in Progress</h1>
+                        <p>Performing a deep EPG scan across all tuners to build your guide.<br>The dashboard will load automatically in a moment.</p>
+                    </div>
+                </body>
+            </html>
+        `);
+    }
+    next();
+});
+
 // Serve static files
 app.use(express.static('public'));
 
