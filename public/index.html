@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Express Tuner Dashboard</title>
+    <title>Express Tuner - TV Guide</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -19,6 +19,10 @@
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
             --text-dim: #64748b;
+            --channel-width: 200px;
+            --time-slot-width: 300px;
+            /* 30 mins = 300px */
+            --row-height: 80px;
         }
 
         * {
@@ -33,6 +37,7 @@
             color: var(--text-primary);
             min-height: 100vh;
             line-height: 1.5;
+            overflow-x: hidden;
         }
 
         .hero-bg {
@@ -46,19 +51,21 @@
         }
 
         header {
-            padding: 2.5rem 2rem;
-            max-width: 1400px;
-            margin: 0 auto;
+            padding: 1.5rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
         }
 
         .brand h1 {
             margin: 0;
-            font-size: 2.5rem;
+            font-size: 1.5rem;
             font-weight: 700;
             letter-spacing: -0.04em;
             background: linear-gradient(to bottom right, #fff, #94a3b8);
@@ -67,163 +74,199 @@
             -webkit-text-fill-color: transparent;
         }
 
-        .brand p {
-            margin: 0.5rem 0 0;
-            color: var(--text-secondary);
-            font-size: 1rem;
-        }
-
-        .controls-bar {
-            background: var(--surface-color);
-            padding: 1rem 2rem;
-            border-top: 1px solid var(--border-color);
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-        }
-
-        .controls-inner {
-            max-width: 1400px;
-            margin: 0 auto;
+        .controls {
             display: flex;
-            gap: 2rem;
+            gap: 1rem;
             align-items: center;
-        }
-
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            font-weight: 500;
         }
 
         select {
-            background: var(--bg-color);
+            background: var(--surface-color);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 0.4rem 1rem;
+            padding: 0.5rem;
             border-radius: 0.5rem;
             font-family: inherit;
             font-size: 0.875rem;
             cursor: pointer;
         }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem 2rem 5rem;
-        }
-
-        .channel-list {
+        .guide-container {
             display: flex;
             flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .channel-row {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 1.25rem;
-            padding: 1.25rem 2rem;
-            display: grid;
-            grid-template-columns: 80px 300px 1fr 240px;
-            align-items: center;
-            gap: 2rem;
-            transition: all 0.3s;
+            overflow: hidden;
             position: relative;
-            cursor: default;
         }
 
-        .channel-row:hover {
-            background: var(--surface-hover);
-            border-color: var(--accent-color);
-            transform: scale(1.005);
+        /* Time Header */
+        .time-header-wrapper {
+            display: flex;
+            margin-left: var(--channel-width);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--surface-color);
+            position: sticky;
+            top: 73px;
+            z-index: 900;
+            overflow: hidden;
         }
 
-        .logo-box {
-            width: 60px;
-            height: 60px;
+        .time-header {
+            display: flex;
+            height: 50px;
+            align-items: center;
+            position: relative;
+        }
+
+        .time-slot {
+            width: var(--time-slot-width);
+            flex-shrink: 0;
+            padding-left: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-dim);
+            border-left: 1px solid var(--border-color);
+            font-weight: 500;
+        }
+
+        .guide-body {
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            max-height: calc(100vh - 123px);
+        }
+
+        .guide-row {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        /* Channel Column */
+        .channel-col {
+            width: var(--channel-width);
+            flex-shrink: 0;
+            background: var(--surface-color);
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: sticky;
+            left: 0;
+            z-index: 800;
+            border-right: 1px solid var(--border-color);
+            height: var(--row-height);
+        }
+
+        .channel-logo {
+            width: 40px;
+            height: 40px;
             background: var(--bg-color);
-            border-radius: 1rem;
+            border-radius: 0.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
             border: 1px solid var(--border-color);
-            font-weight: 700;
-            font-size: 1.5rem;
-            color: var(--accent-color);
+            flex-shrink: 0;
         }
 
-        .logo-box img {
+        .channel-logo img {
             max-width: 80%;
             max-height: 80%;
             object-fit: contain;
         }
 
-        .name {
-            font-size: 1.25rem;
+        .channel-info {
+            overflow: hidden;
+        }
+
+        .channel-name {
             font-weight: 600;
+            font-size: 0.9375rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
             display: block;
         }
 
-        .number {
-            font-size: 0.875rem;
+        .channel-num {
+            font-size: 0.75rem;
             color: var(--text-dim);
         }
 
-        .progress-track {
-            margin-top: 0.75rem;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 2px;
-            width: 100%;
+        /* Programs Grid */
+        .programs-wrapper {
+            display: flex;
+            overflow-x: auto;
+            scroll-behavior: smooth;
             position: relative;
+            flex-grow: 1;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
 
-        .progress-fill {
+        .programs-wrapper::-webkit-scrollbar {
+            display: none;
+        }
+
+        .programs-grid {
+            position: relative;
+            height: var(--row-height);
+        }
+
+        .program-tile {
             position: absolute;
-            left: 0;
-            top: 0;
-            height: 100%;
-            background: var(--accent-color);
-            box-shadow: 0 0 12px var(--accent-glow);
-            transition: width 1s linear;
-        }
-
-        .btn {
-            padding: 0.75rem 1.5rem;
+            top: 10px;
+            bottom: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
             border-radius: 0.75rem;
-            font-weight: 600;
-            font-size: 0.9375rem;
+            padding: 0.75rem 1rem;
             cursor: pointer;
             transition: all 0.2s;
-            border: 1px solid transparent;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             justify-content: center;
         }
 
-        .btn-play {
+        .program-tile:hover {
+            background: var(--surface-hover);
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+            z-index: 10;
+        }
+
+        .program-tile.active {
+            background: rgba(56, 189, 248, 0.1);
+            border-color: var(--accent-color);
+        }
+
+        .prog-title {
+            font-weight: 600;
+            font-size: 0.9375rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 0.1rem;
+        }
+
+        .prog-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Now Marker */
+        .now-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
             background: var(--accent-color);
-            color: #000;
+            z-index: 850;
+            pointer-events: none;
+            box-shadow: 0 0 10px var(--accent-color);
         }
 
-        .btn-outline {
-            background: transparent;
-            border-color: var(--border-color);
-            color: var(--text-primary);
-        }
-
-        .btn-outline:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
+        /* Player Overlay */
         #player-overlay {
             position: fixed;
             top: 0;
@@ -234,19 +277,19 @@
             z-index: 2000;
             display: none;
             flex-direction: column;
-            padding: 2rem;
             justify-content: center;
+            animation: fadeIn 0.4s ease;
+            padding: 2rem;
         }
 
         .player-content {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 1.5rem;
             max-width: 1400px;
             width: 100%;
             margin: 0 auto;
-            height: 100%;
         }
 
         .video-box {
@@ -259,6 +302,7 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.8);
+            position: relative;
         }
 
         video {
@@ -269,42 +313,105 @@
 
         .close-player {
             background: var(--surface-color);
-            width: 50px;
-            height: 50px;
-            border-radius: 1.25rem;
+            width: 44px;
+            height: 44px;
+            border-radius: 0.75rem;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             border: 1px solid var(--border-color);
-            font-size: 1.5rem;
+            font-size: 1.25rem;
+            transition: 0.2s;
         }
 
-        @media (max-width: 1100px) {
-            .channel-row {
-                grid-template-columns: 80px 1fr 200px;
+        .close-player:hover {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
             }
 
-            .channel-row .program-info {
-                display: none;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
 
-        @media (max-width: 768px) {
-            .channel-row {
-                grid-template-columns: 60px 1fr;
-                padding: 1rem;
-            }
+        /* Details Tooltip */
+        #details-panel {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface-color);
+            border: 1px solid var(--accent-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            width: 600px;
+            max-width: 90vw;
+            z-index: 1500;
+            display: none;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
 
-            .row-actions {
-                display: none;
-            }
+        .details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
 
-            .controls-inner {
-                flex-direction: column;
-                gap: 1rem;
-                align-items: flex-start;
-            }
+        .details-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .details-desc {
+            font-size: 0.9375rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .details-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.6rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: 0.2s;
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .btn-play {
+            background: var(--accent-color);
+            color: #000;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
         }
     </style>
 </head>
@@ -314,48 +421,52 @@
     <header>
         <div class="brand">
             <h1>Express Tuner</h1>
-            <p>Direct Tuner Access & Dynamic Transcoding</p>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="/playlist.m3u" class="btn btn-outline" id="m3u-link">M3U List</a>
-            <a href="/xmltv.xml" class="btn btn-outline">XMLTV Guide</a>
+        <div class="controls">
+            <select id="format-select">
+                <option value="ts">MPEG-TS</option>
+                <option value="mkv">Matroska</option>
+                <option value="mp4">Fragmented MP4</option>
+            </select>
+            <select id="codec-select">
+                <option value="h264">H.264</option>
+                <option value="h265">H.265</option>
+                <option value="av1">AV1</option>
+                <option value="copy">Copy</option>
+            </select>
+            <a href="/playlist.m3u" class="btn btn-outline" id="m3u-btn">M3U</a>
         </div>
     </header>
 
-    <div class="controls-bar">
-        <div class="controls-inner">
-            <div class="control-group">
-                <span>Output Format:</span>
-                <select id="format-select" onchange="updateLinks()">
-                    <option value="ts">MPEG-TS (.ts)</option>
-                    <option value="mkv">Matroska (.mkv)</option>
-                    <option value="mp4">Fragmented MP4 (.mp4)</option>
-                </select>
+    <div class="guide-container">
+        <div class="time-header-wrapper">
+            <div id="time-header" class="time-header"></div>
+        </div>
+        <div id="guide-body" class="guide-body"></div>
+    </div>
+
+    <!-- Program Details Panel -->
+    <div id="details-panel">
+        <div class="details-header">
+            <div>
+                <h3 class="details-title" id="det-title">Program Title</h3>
+                <div class="prog-time" id="det-time">12:00 PM - 1:00 PM</div>
             </div>
-            <div class="control-group">
-                <span>Video Codec:</span>
-                <select id="codec-select" onchange="updateLinks()">
-                    <option value="h264">H.264 (Broad Compatibility)</option>
-                    <option value="h265">H.265 (High Efficiency)</option>
-                    <option value="av1">AV1 (Next-Gen)</option>
-                    <option value="copy">Strict Copy (No Transcode)</option>
-                </select>
-            </div>
+            <button class="close-player" onclick="closeDetails()"
+                style="width:32px; height:32px; font-size:1rem;">✕</button>
+        </div>
+        <p class="details-desc" id="det-desc">Program description goes here...</p>
+        <div class="details-actions">
+            <button class="btn btn-play" id="watch-now-btn">Watch Now</button>
+            <button class="btn btn-outline" id="copy-url-btn">Copy Stream URL</button>
         </div>
     </div>
 
-    <div class="container">
-        <div id="loader" style="text-align: center; padding: 10rem;">Connecting...</div>
-        <div id="channel-list" class="channel-list"></div>
-    </div>
-
+    <!-- Player Overlay -->
     <div id="player-overlay">
         <div class="player-content">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h2 id="v-title" style="margin:0"></h2>
-                    <p id="v-desc" style="margin:0.5rem 0 0; color: var(--text-secondary)"></p>
-                </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 id="v-title" style="margin:0; font-size:1.25rem;"></h2>
                 <div class="close-player" onclick="closePlayer()">✕</div>
             </div>
             <div class="video-box"><video id="videoElement" controls></video></div>
@@ -365,186 +476,172 @@
     <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
     <script>
         let tsPlayer = null;
-        let channelsData = [];
+        let guideData = [];
+        let startTime = Date.now() - (30 * 60 * 1000); // Start grid 30 mins ago
+        const pixelsPerHour = 600;
 
-        async function load() {
+        async function loadGuide() {
             try {
-                const r = await fetch('/api/now-playing');
+                const r = await fetch('/api/guide');
                 const d = await r.json();
-                channelsData = d.channels;
-                updateLinks();
-            } catch (e) { document.getElementById('loader').textContent = 'Error loading tuner.'; }
+                guideData = d.channels;
+                render();
+            } catch (e) { console.error('Error loading guide:', e); }
         }
 
-        function updateLinks() {
-            const format = document.getElementById('format-select').value;
-            const codec = document.getElementById('codec-select').value;
-            const loader = document.getElementById('loader');
-            const list = document.getElementById('channel-list');
+        function render() {
+            const timeHeader = document.getElementById('time-header');
+            const guideBody = document.getElementById('guide-body');
 
-            // Build query
-            const q = `?f=${format}&c=${codec}`;
-            document.getElementById('m3u-link').href = `/playlist.m3u${q}`;
+            // Build time header (12 hours)
+            timeHeader.innerHTML = '';
+            for (let i = 0; i < 24; i++) {
+                const slotTime = new Date(startTime + (i * 30 * 60 * 1000));
+                const slot = document.createElement('div');
+                slot.className = 'time-slot';
+                slot.textContent = slotTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                timeHeader.appendChild(slot);
+            }
 
-            loader.style.display = 'none';
-            list.innerHTML = '';
-
-            channelsData.forEach((c, index) => {
-                const now = c.now_playing;
+            guideBody.innerHTML = '';
+            guideData.forEach(chan => {
                 const row = document.createElement('div');
-                row.className = 'channel-row';
-
-                // Content construction
-                const logo = c.icon ? `<img src="${c.icon}">` : `<span>${c.name ? c.name.charAt(0) : '?'}</span>`;
-                const progress = now ? `<div class="progress-track"><div class="progress-fill" style="width:${now.progress}%"></div></div>` : '';
+                row.className = 'guide-row';
 
                 row.innerHTML = `
-                    <div class="logo-box">${logo}</div>
-                    <div><span class="name">${c.name || 'Unknown Channel'}</span><span class="number">VC ${c.number}</span></div>
-                    <div class="program-info">
-                        <div style="font-weight:500">${now ? now.title : 'Live'}</div>
-                        <div style="font-size:0.875rem; color:var(--text-secondary); display:-webkit-box; -webkit-line-clamp:1; line-clamp:1; -webkit-box-orient:vertical; overflow:hidden;">${now ? (now.description || 'No description') : 'Signal Active'}</div>
-                        ${progress}
+                    <div class="channel-col">
+                        <div class="channel-logo">
+                            ${chan.icon ? `<img src="${chan.icon}">` : chan.name.charAt(0)}
+                        </div>
+                        <div class="channel-info">
+                            <span class="channel-name">${chan.name}</span>
+                            <span class="channel-num">VC ${chan.number}</span>
+                        </div>
                     </div>
-                    <div style="display:flex; gap:0.5rem; justify-content:flex-end">
-                        <button class="btn btn-outline btn-copy-url">URL</button>
-                        <button class="btn btn-play btn-watch">Watch</button>
-                    </div>`;
+                    <div class="programs-wrapper">
+                        <div class="programs-grid" style="width: ${12 * pixelsPerHour}px">
+                            ${chan.programs.map(p => {
+                    const left = ((p.start - startTime) / 3600000) * pixelsPerHour;
+                    const width = ((p.end - p.start) / 3600000) * pixelsPerHour;
+                    if (left + width < 0) return '';
+                    const isActive = Date.now() >= p.start && Date.now() < p.end;
+                    return `<div class="program-tile ${isActive ? 'active' : ''}" 
+                                            style="left: ${left}px; width: ${width - 4}px"
+                                            onclick="showDetails('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">
+                                            <div class="prog-title">${p.title}</div>
+                                            <div class="prog-time">${new Date(p.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+                                        </div>`;
+                }).join('')}
+                        </div>
+                    </div>
+                `;
+                guideBody.appendChild(row);
+            });
 
-                // Event Listeners
-                row.querySelector('.btn-copy-url').addEventListener('click', (e) => copy(`/stream/${c.number}${q}`, e));
-                row.querySelector('.btn-watch').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    playByIndex(index);
+            // Update Now Marker
+            updateNowMarker();
+
+            // Synchronize Horizontal Scrolling
+            const wrappers = document.querySelectorAll('.programs-wrapper');
+            wrappers.forEach(w => {
+                w.addEventListener('scroll', () => {
+                    document.getElementById('time-header').style.transform = `translateX(-${w.scrollLeft}px)`;
+                    wrappers.forEach(other => {
+                        if (other !== w) other.scrollLeft = w.scrollLeft;
+                    });
                 });
+            });
 
-                list.appendChild(row);
+            // Auto-scroll to current time
+            const initialScroll = ((Date.now() - startTime) / 3600000) * pixelsPerHour - 200;
+            wrappers.forEach(w => w.scrollLeft = Math.max(0, initialScroll));
+
+            // Update M3U Link
+            const updateM3ULink = () => {
+                const f = document.getElementById('format-select').value;
+                const c = document.getElementById('codec-select').value;
+                document.getElementById('m3u-btn').href = `/playlist.m3u?f=${f}&c=${c}`;
+            };
+            document.getElementById('format-select').onchange = updateM3ULink;
+            document.getElementById('codec-select').onchange = updateM3ULink;
+            updateM3ULink();
+        }
+
+        function updateNowMarker() {
+            document.querySelectorAll('.now-marker').forEach(m => m.remove());
+            const nowLeft = ((Date.now() - startTime) / 3600000) * pixelsPerHour;
+            document.querySelectorAll('.programs-grid').forEach(grid => {
+                const m = document.createElement('div');
+                m.className = 'now-marker';
+                m.style.left = `${nowLeft}px`;
+                grid.appendChild(m);
             });
         }
 
-        function playByIndex(index) {
-            console.log('Playing index:', index);
-            const c = channelsData[index];
-            if (!c) return console.error('No channel at index', index);
+        function showDetails(chanNum, chanName, program) {
+            document.getElementById('det-title').textContent = program.title;
+            document.getElementById('det-time').textContent = `${new Date(program.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - ${new Date(program.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+            document.getElementById('det-desc').textContent = program.description || 'No description available.';
+
+            const panel = document.getElementById('details-panel');
+            panel.style.display = 'block';
 
             const format = document.getElementById('format-select').value;
             const codec = document.getElementById('codec-select').value;
-            const now = c.now_playing;
-            play(c.number, format, codec, c.name, now ? now.title : 'Live', now ? now.description : '');
+            const q = `?f=${format}&c=${codec}`;
+
+            document.getElementById('watch-now-btn').onclick = () => play(chanNum, format, codec, chanName, program.title);
+            document.getElementById('copy-url-btn').onclick = (e) => copy(`/stream/${chanNum}${q}`, e);
         }
 
-        function play(num, f, c, name, title, desc) {
-            console.log('Starting stream:', { num, f, c });
-            try {
-                const url = `/stream/${encodeURIComponent(num)}/${f}/${c}`;
-                const video = document.getElementById('videoElement');
+        function closeDetails() {
+            document.getElementById('details-panel').style.display = 'none';
+        }
 
-                document.getElementById('v-title').textContent = `${num} ${name || ''} ${title ? '- ' + title : ''}`;
-                document.getElementById('v-desc').textContent = desc || 'Direct tuner stream.';
-                document.getElementById('player-overlay').style.display = 'flex';
-                document.body.style.overflow = 'hidden';
+        function play(num, f, c, name, title) {
+            const url = `/stream/${encodeURIComponent(num)}/${f}/${c}`;
+            const video = document.getElementById('videoElement');
+            document.getElementById('v-title').textContent = `${num} ${name} - ${title}`;
+            document.getElementById('player-overlay').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            closeDetails();
 
-                // Add history state so back button works
-                history.pushState({ playerOpen: true }, '', '#player');
+            history.pushState({ playerOpen: true }, '', '#player');
 
-                if (f === 'ts' && window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
-                    tsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: url });
-                    tsPlayer.attachMediaElement(video);
-                    tsPlayer.load();
-                    tsPlayer.play().catch(e => console.error('Play error:', e));
-                } else {
-                    video.src = url;
-                    video.play().catch(e => console.error('Native play error:', e));
-                }
-            } catch (err) {
-                console.error('Failed to launch player:', err);
-                alert('Could not start video player. Check console for details.');
+            if (f === 'ts' && window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
+                tsPlayer = mpegts.createPlayer({ type: 'mse', isLive: true, url: url });
+                tsPlayer.attachMediaElement(video);
+                tsPlayer.load(); tsPlayer.play();
+            } else {
+                video.src = url;
+                video.play();
             }
         }
 
         function closePlayer(isPopState = false) {
             const video = document.getElementById('videoElement');
-            if (tsPlayer) {
-                tsPlayer.pause();
-                tsPlayer.unload();
-                tsPlayer.detachMediaElement();
-                tsPlayer.destroy();
-                tsPlayer = null;
-            }
-
-            // Always stop the native video element and release resources
-            video.pause();
-            video.src = "";
-            video.load();
-
+            if (tsPlayer) { tsPlayer.pause(); tsPlayer.unload(); tsPlayer.destroy(); tsPlayer = null; }
+            video.pause(); video.src = ""; video.load();
             document.getElementById('player-overlay').style.display = 'none';
             document.body.style.overflow = 'auto';
-
-            // If we closed manually (not via back button), remove the hash
-            if (!isPopState && window.location.hash === '#player') {
-                history.back();
-            }
+            if (!isPopState && window.location.hash === '#player') history.back();
         }
 
-        // Handle Browser Back Button
-        window.addEventListener('popstate', (e) => {
-            if (document.getElementById('player-overlay').style.display === 'flex') {
-                closePlayer(true);
-            }
-        });
-
-        // Close on Escape key
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && document.getElementById('player-overlay').style.display === 'flex') {
-                closePlayer();
-            }
-        });
+        window.addEventListener('popstate', () => { if (document.getElementById('player-overlay').style.display === 'flex') closePlayer(true); });
+        window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePlayer(); closeDetails(); } });
 
         function copy(path, e) {
-            if (e) e.stopPropagation();
             const url = window.location.origin + path;
             const btn = e.currentTarget;
-            const originalText = btn.textContent;
-
-            const updateBtn = () => {
-                btn.textContent = 'OK!';
-                btn.style.borderColor = 'var(--accent-color)';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.borderColor = '';
-                }, 1500);
-            };
-
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(url).then(updateBtn).catch(err => {
-                    console.error('Clipboard error:', err);
-                    fallbackCopy(url, updateBtn);
-                });
-            } else {
-                fallbackCopy(url, updateBtn);
-            }
+            navigator.clipboard.writeText(url).then(() => {
+                const old = btn.textContent; btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = old, 1500);
+            });
         }
 
-        function fallbackCopy(text, callback) {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-9999px";
-            textArea.style.top = "0";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                callback();
-            } catch (err) {
-                console.error('Fallback copy failed:', err);
-            }
-            document.body.removeChild(textArea);
-        }
-
-        load();
-        setInterval(load, 30000);
+        loadGuide();
+        setInterval(updateNowMarker, 60000);
+        setInterval(loadGuide, 300000); // Refresh guide every 5 mins
     </script>
 </body>
 
