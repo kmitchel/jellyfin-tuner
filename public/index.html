@@ -285,6 +285,27 @@
             font-size: 0.5rem;
         }
 
+        .program-tile.recording::after {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(1.2);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
         .prog-title {
             font-weight: 500;
             font-size: 0.9375rem;
@@ -555,6 +576,8 @@
             <button class="btn btn-play" id="watch-now-btn">Watch Live</button>
             <button class="btn btn-rec" id="record-once-btn">Record Once</button>
             <button class="btn btn-rec" id="record-series-btn" style="background: #991b1b;">Record Series</button>
+            <button class="btn btn-rec" id="stop-recording-btn"
+                style="display:none; background: #dc2626; color: white;">Stop Recording</button>
             <button class="btn btn-outline" id="copy-url-btn">Stream URL</button>
         </div>
     </div>
@@ -626,10 +649,13 @@
                     const width = ((p.end - p.start) / 3600000) * pixelsPerHour;
                     if (left + width < 0) return '';
                     const isActive = Date.now() >= p.start && Date.now() < p.end;
-                    return `<div class="program-tile ${isActive ? 'active' : ''} ${p.scheduled ? 'scheduled' : ''}" 
-                                            style="left: ${left}px; width: ${width - 4}px"
-                                            onclick="showDetails('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', ${JSON.stringify(p).replace(/"/g, '&quot;')})"
-                                            ondblclick="playLive('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', '${p.title.replace(/'/g, "\\'")}')">
+                    const isScheduled = p.scheduled ? 'scheduled' : '';
+                    const isRecording = p.recording ? 'recording' : '';
+                    return `
+                        <div class="program-tile ${isActive ? 'active' : ''} ${isScheduled} ${isRecording}"
+                             style="left: ${left}px; width: ${width - 2}px"
+                             onclick="showDetails('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', ${JSON.stringify(p).replace(/"/g, '&quot;')})"
+                             ondblclick="playLive('${chan.number}', '${chan.name.replace(/'/g, "\\'")}', '${p.title.replace(/'/g, "\\'")}')">
                                             <div class="prog-title">${p.title}</div>
                                             <div class="prog-time">${new Date(p.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
                                         </div>`;
@@ -679,17 +705,52 @@
 
                 document.getElementById('record-once-btn').onclick = () => schedule('once', p.title, num, p.start, p.end);
                 document.getElementById('record-series-btn').onclick = () => schedule('series', p.title, num);
+                document.getElementById('stop-recording-btn').onclick = () => stopActiveRecording(num, p.start);
 
-                if (p.scheduled) {
-                    document.querySelectorAll('.btn-rec').forEach(b => { b.disabled = true; b.style.opacity = 0.5; b.textContent = 'Scheduled'; });
+                if (p.recording) {
+                    document.getElementById('stop-recording-btn').style.display = 'inline-flex';
+                    document.getElementById('record-once-btn').style.display = 'none';
+                    document.getElementById('record-series-btn').style.display = 'none';
+                } else if (p.scheduled) {
+                    document.getElementById('stop-recording-btn').style.display = 'none';
+                    document.getElementById('record-once-btn').style.display = 'inline-flex';
+                    document.getElementById('record-series-btn').style.display = 'inline-flex';
+                    document.querySelectorAll('.btn-rec').forEach(b => {
+                        if (b.id !== 'stop-recording-btn') {
+                            b.disabled = true; b.style.opacity = 0.5; b.textContent = 'Scheduled';
+                        }
+                    });
                 } else {
-                    document.querySelectorAll('.btn-rec').forEach(b => { b.disabled = false; b.style.opacity = 1; });
+                    document.getElementById('stop-recording-btn').style.display = 'none';
+                    document.getElementById('record-once-btn').style.display = 'inline-flex';
+                    document.getElementById('record-series-btn').style.display = 'inline-flex';
+                    document.querySelectorAll('.btn-rec').forEach(b => {
+                        if (b.id !== 'stop-recording-btn') {
+                            b.disabled = false; b.style.opacity = 1;
+                        }
+                    });
                     document.getElementById('record-once-btn').textContent = 'Record Once';
                     document.getElementById('record-series-btn').textContent = 'Record Series';
                 }
 
                 clickTimer = null;
             }, 250);
+        }
+
+        async function stopActiveRecording(num, start) {
+            if (confirm('Stop this active recording?')) {
+                const res = await fetch('/api/recordings/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel_num: num, start_time: start })
+                });
+                if (res.ok) {
+                    alert('Recording stopped.');
+                    closeDetails();
+                    loadGuide();
+                    loadRecordings();
+                }
+            }
         }
 
         function closeDetails() {
