@@ -84,9 +84,18 @@ sudo chown -R jellyfin:jellyfin /opt/jellyfin-tuner
 sudo usermod -aG video,render jellyfin
 ```
 
-### 2. Create the Systemd Service
-If you haven't already, create the service file at `/etc/systemd/system/express-m3u-tuner.service`. You can use the provided file or create it manually:
+### 2. Install the Systemd Service
 
+You can either link the service file directly from the repository (recommended for easy updates) or create it manually.
+
+#### Option A: Link the service file (Recommended)
+This method links the service file from the project directory, so updates to the file in the repository are automatically applied.
+```bash
+sudo systemctl link /opt/jellyfin-tuner/express-m3u-tuner.service
+```
+
+#### Option B: Create manually
+If you prefer to create the file manually at `/etc/systemd/system/express-m3u-tuner.service`:
 ```bash
 sudo nano /etc/systemd/system/express-m3u-tuner.service
 ```
