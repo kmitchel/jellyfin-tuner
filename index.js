@@ -11,19 +11,19 @@ const app = express();
 setupRoutes(app);
 
 if (ENABLE_EPG) {
-    // Schedule EPG grab every 15 minutes
-    setInterval(() => EPG.grab(60000), 15 * 60 * 1000);
+    // Schedule EPG grab every 15 minutes with a shorter 15s-per-mux timeout for background updates
+    setInterval(() => EPG.grab(15000), 15 * 60 * 1000);
 
     // Priority: Initial grab on startup ONLY if database is missing
     if (!dbExists) {
-        console.log('Database not found, performing initial EPG scan...');
+        console.log('Database not found, performing initial deep EPG scan...');
         // Small delay to ensure tuners are ready
+        // Deep scan (30s per mux)
         setTimeout(() => EPG.grab(30000), 2000);
     } else {
-        // If DB exists, still run scan but after a short delay
-        // This provides immediate usability while updating guide data
+        // If DB exists, still run a quick scan after a short delay
         EPG.isInitialScanDone = true;
-        setTimeout(() => EPG.grab(60000), 5000);
+        setTimeout(() => EPG.grab(20000), 5000);
     }
 } else {
     console.log('EPG scanning is disabled.');
