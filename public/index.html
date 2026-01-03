@@ -547,12 +547,44 @@
 
         function copyStream(url, event) {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(url).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
+            const btn = event.currentTarget;
+            const originalText = btn.textContent;
+
+            const updateBtn = () => {
                 btn.textContent = 'Copied!';
-                setTimeout(() => btn.textContent = originalText, 2000);
-            });
+                btn.style.borderColor = 'var(--accent-color)';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.borderColor = '';
+                }, 2000);
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url).then(updateBtn).catch(err => {
+                    console.error('Clipboard error:', err);
+                    fallbackCopy(url, updateBtn);
+                });
+            } else {
+                fallbackCopy(url, updateBtn);
+            }
+        }
+
+        function fallbackCopy(text, callback) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                callback();
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+            }
+            document.body.removeChild(textArea);
         }
 
         refreshData();
