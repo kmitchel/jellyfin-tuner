@@ -137,6 +137,7 @@ Once the service is active, the server is available on port `3000` (default). It
 | `ENABLE_TRANSCODING`| Toggle FFmpeg transcoding | `false` |
 | `ENABLE_QSV` | Enable Intel QSV Hardware Accel | `false` |
 | `ENABLE_PREEMPTION` | Allow tuners to be stolen | `false` |
+| `ENABLE_EPG` | Enable EPG scanning | `true` |
 | `VERBOSE_LOGGING` | Enable deep debug logs | `false` |
 
 ## 🐳 Docker Deployment
@@ -206,7 +207,10 @@ docker run -d \
 
 ## 🔗 Endpoints
 
-- **Lineup**: `http://localhost:3000/lineup.m3u`
+> [!WARNING]
+> **Breaking Change**: The M3U playlist endpoint has been renamed from `/lineup.m3u` to `/playlist.m3u` to better reflect its content. Please update your tuner configurations in Jellyfin/threadfin accordingly.
+
+- **Lineup**: `http://localhost:3000/playlist.m3u`
 - **EPG**: `http://localhost:3000/xmltv.xml`
 - **Stream**: `http://localhost:3000/stream/:channelNum`
 
