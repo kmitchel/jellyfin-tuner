@@ -293,7 +293,6 @@ If you update your `channels.conf` or notice your guide is stale/incorrect in Je
 ### ⚠️ Known Issues
 
 - **[SOLVED] EPG Virtual Channel Mismatch**: Previously, EPG data could occasionally display on the wrong subchannel. This was resolved by switching to virtual channel numbers for disambiguation and tuning, ensuring EPG data is correctly mapped and retrieved based on reliable channel identifiers.
-- **Chromecast Connectivity**: Some users have reported that the Jellyfin Android/Chromecast application may repeatedly close its connection and restart the stream. This behavior appears unique to the Chromecast environment and may relate to how it handles the underlying MPEG-TS stream timing. [WORKAROUND] Configure Jellyfin on the Chromecast to transcode livetv streams.
 
 ## 📄 License
 ISC
