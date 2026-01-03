@@ -64,6 +64,7 @@
             letter-spacing: -0.04em;
             background: linear-gradient(to bottom right, #fff, #94a3b8);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -253,6 +254,8 @@
             z-index: 2000;
             display: none;
             flex-direction: column;
+            justify-content: center;
+            /* Center player vertically */
             padding: 2rem;
             animation: fadeIn 0.4s ease;
         }
@@ -293,6 +296,11 @@
             border: 1px solid var(--border-color);
             position: relative;
             box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.8);
+            max-height: 70vh;
+            /* Ensure it stays within viewport height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         video {
