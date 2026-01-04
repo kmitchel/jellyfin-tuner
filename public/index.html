@@ -805,7 +805,7 @@
                         </div>
                     </div>
                     <div style="display:flex; gap:1rem;">
-                        <button class="btn btn-play" onclick="playFile('/recordings/${rec.file_path.split(/[\\/]/).pop()}', '${rec.title}', ${isActive})">
+                        <button class="btn btn-play" onclick="playFile('/api/play/${rec.id}/mp4/h264', '${rec.title}', ${isActive})">
                             ${isActive ? 'Watch from Start' : 'Play'}
                         </button>
                         <button class="btn btn-outline btn-danger" onclick="deleteRec(${rec.id})">Delete</button>
@@ -903,11 +903,11 @@
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            // Detection: Use mpegts.js for any TS file or ANY /stream/ endpoint 
+            // Detection: Use mpegts.js for any TS file or ANY /stream/ or /api/play/ endpoint 
             // (unless it's explicitly asking for mkv/mp4 which mpegts.js can't handle)
             const lowerUrl = url.toLowerCase();
             const isExplicitNative = lowerUrl.includes('.mkv') || lowerUrl.includes('.mp4') || lowerUrl.includes('/mkv') || lowerUrl.includes('/mp4');
-            const useMpegts = lowerUrl.includes('.ts') || (url.includes('/stream/') && !isExplicitNative);
+            const useMpegts = lowerUrl.includes('.ts') || ((url.includes('/stream/') || url.includes('/api/play/')) && !isExplicitNative);
 
             if (useMpegts && window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
                 try {
