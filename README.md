@@ -2,7 +2,7 @@
 
 A high-performance ExpressJS server for turning your USB DVB/ATSC tuners into a network-accessible M3U playlist with full XMLTV Electronic Program Guide (EPG) support.
 
-The focus of this project will retunn to a minimal solution to connect Jellyfin to OTA tuners, providing a EPG service and streaming the raw mpeg/ts to Jellyfin for further processing. https://github.com/kmitchel/ZapLink is a more comprehensive solution, that offer flexible transcoding, DVR functionality, and a feature rich program guide.
+The focus of this project will return to a minimal solution to connect Jellyfin to OTA tuners, providing a EPG service and streaming the raw mpeg/ts to Jellyfin for further processing. https://github.com/kmitchel/ZapLink is a more comprehensive solution, that offer flexible transcoding, DVR functionality, and a feature rich program guide.
 
 ## 🚀 Features
 
