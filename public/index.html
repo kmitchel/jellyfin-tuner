@@ -255,7 +255,6 @@
             padding: 0;
             cursor: pointer;
             transition: all 0.2s;
-            overflow: hidden;
             display: flex;
             flex-direction: column;
         }
@@ -264,14 +263,17 @@
             position: sticky;
             left: 0;
             padding: 0.5rem 0.75rem;
-            width: 100%;
+            width: fit-content;
+            min-width: 200px;
+            /* Give it space to slide in long blocks */
+            max-width: 100%;
             height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             overflow: hidden;
             pointer-events: none;
-            /* Let clicks pass to the tile */
+            z-index: 1;
         }
 
         .program-tile:hover {
