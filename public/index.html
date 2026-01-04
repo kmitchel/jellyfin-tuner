@@ -740,9 +740,11 @@
     <!-- Toast Container -->
     <div id="toast-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
     <script>
         let tsPlayer = null;
+        let hlsPlayer = null;
         let guideData = [];
         let startTime = Date.now() - (30 * 60 * 1000);
         const pixelsPerHour = 600;
@@ -1089,20 +1091,29 @@
             }
         }
 
+
         function playLive(num, name, title) {
-            // Updated: Using H.264/MP4 for live streams as requested
-            // This bypasses mpegts.js and uses the browser's native player
-            launchPlayer(`/stream/${encodeURIComponent(num)}/mp4/h264`, `${num} ${name} - ${title}`, true);
+            // Use HLS for live streaming to allow seeking/buffering
+            launchPlayer(`/stream/${encodeURIComponent(num)}/hls/h264`, `${num} ${name} - ${title}`, true);
         }
 
         function playFile(url, title, isRecording = false) {
-            launchPlayer(url, title, isRecording);
+            // For recordings, use HLS if possible for seeking
+            // We need to change the URL structure slightly if we want to force HLS from the ID
+            // The current arguments are pre-built URL. We might need to adjust the caller or parse here.
+            // If url includes '/api/play/', switch to HLS format
+            if (url.includes('/api/play/')) {
+                const newUrl = url.replace('/mp4/', '/hls/').replace('/ts/', '/hls/'); // crude swap
+                launchPlayer(newUrl, title, isRecording);
+            } else {
+                launchPlayer(url, title, isRecording);
+            }
         }
 
         function launchPlayer(url, title, isLiveStream = false) {
             const video = document.getElementById('videoElement');
 
-            // Clean up existing player first
+            // Clean up existing players
             if (tsPlayer) {
                 try {
                     tsPlayer.pause();
@@ -1112,14 +1123,51 @@
                 } catch (e) { }
                 tsPlayer = null;
             }
+            if (hlsPlayer) {
+                try {
+                    hlsPlayer.destroy();
+                } catch (e) { }
+                hlsPlayer = null;
+            }
 
             document.getElementById('v-title').textContent = title;
             document.getElementById('player-overlay').style.display = 'flex';
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            // Detection: Use mpegts.js for any TS file or ANY /stream/ or /api/play/ endpoint 
-            // (unless it's explicitly asking for mkv/mp4 which mpegts.js can't handle)
+            // HLS Detection
+            if (url.includes('/hls/') || url.endsWith('.m3u8')) {
+                const statusBox = document.getElementById('v-status');
+                statusBox.textContent = 'Loading HLS Stream...';
+
+                if (Hls.isSupported()) {
+                    hlsPlayer = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        lowLatencyMode: isLiveStream,
+                    });
+                    hlsPlayer.loadSource(url);
+                    hlsPlayer.attachMedia(video);
+                    hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function () {
+                        statusBox.textContent = 'Playing (HLS)';
+                        video.play();
+                    });
+                    hlsPlayer.on(Hls.Events.ERROR, function (event, data) {
+                        if (data.fatal) {
+                            statusBox.textContent = 'HLS Error: ' + data.type;
+                            console.error('HLS Fatal Error:', data);
+                        }
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS (Safari)
+                    video.src = url;
+                    video.play();
+                }
+                closeDetails(); // Close details panel after launching player
+                return; // Exit after handling HLS
+            }
+
+            // Fallback/Legacy Logic ...
             const lowerUrl = url.toLowerCase();
             const isExplicitNative = lowerUrl.includes('.mkv') || lowerUrl.includes('.mp4') || lowerUrl.includes('/mkv') || lowerUrl.includes('/mp4');
             const useMpegts = lowerUrl.includes('.ts') || ((url.includes('/stream/') || url.includes('/api/play/')) && !isExplicitNative);
