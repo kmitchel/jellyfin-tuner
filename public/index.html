@@ -602,6 +602,7 @@
         const pixelsPerHour = 600;
 
         function showPage(pageId) {
+            closeDetails();
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
             document.getElementById('page-' + pageId).classList.add('active');
