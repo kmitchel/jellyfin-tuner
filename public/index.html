@@ -64,6 +64,12 @@
             z-index: 1000;
         }
 
+        .brand {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+
         .brand h1 {
             margin: 0;
             font-size: 1.5rem;
@@ -72,6 +78,13 @@
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        #app-version {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            font-weight: 400;
+            opacity: 0.8;
         }
 
         .main-nav {
@@ -538,9 +551,8 @@
     <div class="hero-bg"></div>
     <header>
         <div class="brand">
-            <h1>Express Tuner <span id="app-version"
-                    style="font-size:0.5em; opacity:0.7; vertical-align:middle; margin-left:8px; font-weight:normal;"></span>
-            </h1>
+            <h1>Express Tuner</h1>
+            <span id="app-version"></span>
         </div>
         <nav class="main-nav">
             <div class="nav-link active" onclick="showPage('guide')">Guide</div>
