@@ -527,8 +527,8 @@
         </nav>
         <div class="controls">
             <select id="format-select">
-                <option value="ts">MPEG-TS</option>
-                <option value="mkv" selected>Matroska</option>
+                <option value="ts" selected>MPEG-TS</option>
+                <option value="mkv">Matroska (MKV)</option>
                 <option value="mp4">Fragmented MP4</option>
             </select>
             <select id="codec-select">
@@ -892,10 +892,11 @@
             document.body.style.overflow = 'hidden';
             history.pushState({ playerOpen: true }, '', '#player');
 
-            // Detection: Use mpegts.js ONLY for actual MPEG-TS content
-            const isTsFile = url.toLowerCase().includes('.ts');
-            const isTsStream = url.includes('/stream/') && url.split('/').includes('ts');
-            const useMpegts = isTsFile || isTsStream;
+            // Detection: Use mpegts.js for any TS file or ANY /stream/ endpoint 
+            // (unless it's explicitly asking for mkv/mp4 which mpegts.js can't handle)
+            const lowerUrl = url.toLowerCase();
+            const isExplicitNative = lowerUrl.includes('.mkv') || lowerUrl.includes('.mp4') || lowerUrl.includes('/mkv') || lowerUrl.includes('/mp4');
+            const useMpegts = lowerUrl.includes('.ts') || (url.includes('/stream/') && !isExplicitNative);
 
             if (useMpegts && window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
                 try {
@@ -956,13 +957,17 @@
                     }, bootDelay);
                 } catch (e) {
                     console.error('Failed to init mpegts player:', e);
+                    statusBox.textContent = 'MPEG-TS not supported by your browser.';
                     video.src = url;
                     video.play().catch(err => { });
                 }
             } else {
+                const statusBox = document.getElementById('v-status');
+                statusBox.textContent = 'Playing via native player...';
                 video.src = url;
                 video.play().catch(e => {
                     console.error('Native playback failed:', e);
+                    statusBox.textContent = 'Error: Your browser does not support this video format natively.';
                 });
             }
             closeDetails();
