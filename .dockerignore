@@ -2,7 +2,7 @@ node_modules
 npm-debug.log
 epg.db
 channels.conf
-logos.json
+
 .git
 .gitignore
 Dockerfile
