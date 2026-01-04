@@ -294,3 +294,7 @@ If you update your `channels.conf` or notice your guide is stale/incorrect in Je
 
 ## 📄 License
 ISC
+
+## 🧪 Status
+
+This project is currently under active development. The `experimental` branch contains the latest features including MP4 streaming and on-the-fly transcoding.
