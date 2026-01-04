@@ -1034,14 +1034,39 @@
             }
             if (nextOccur) {
                 schedule('once', nextOccur.title, nextOccur.chanNum, nextOccur.start, nextOccur.end);
-                alert(`Next occurrence found on ${nextOccur.chanNum} at ${new Date(nextOccur.start).toLocaleString()}!`);
+                showToast(`Found next showing on ${nextOccur.chanNum} at ${new Date(nextOccur.start).toLocaleString()}`, 'success');
             } else {
-                alert('No future occurrences found in the current guide for "' + title + '".');
+                showToast('No future occurrences found in the guide.', 'error');
             }
         }
 
-        async function deleteRec(id) { if (confirm('Delete this recording?')) { await fetch('/api/recordings/' + id, { method: 'DELETE' }); loadRecordings(); } }
-        async function deleteTimer(id) { if (confirm('Cancel this timer?')) { await fetch('/api/timers/' + id, { method: 'DELETE' }); loadSchedule(); } }
+        async function deleteRec(id) {
+            if (confirm('Delete this recording?')) {
+                try {
+                    const r = await fetch('/api/recordings/' + id, { method: 'DELETE' });
+                    if (r.ok) {
+                        showToast('Recording deleted.', 'success');
+                        loadRecordings();
+                    } else {
+                        showToast('Failed to delete recording.', 'error');
+                    }
+                } catch (e) { showToast('Error deleting recording.', 'error'); }
+            }
+        }
+
+        async function deleteTimer(id) {
+            if (confirm('Cancel this timer?')) {
+                try {
+                    const r = await fetch('/api/timers/' + id, { method: 'DELETE' });
+                    if (r.ok) {
+                        showToast('Timer cancelled.', 'success');
+                        loadSchedule();
+                    } else {
+                        showToast('Failed to cancel timer.', 'error');
+                    }
+                } catch (e) { showToast('Error cancelling timer.', 'error'); }
+            }
+        }
 
         function playLive(num, name, title) {
             // Updated: Using H.264/MP4 for live streams as requested
