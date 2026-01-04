@@ -1036,7 +1036,10 @@
         }
 
 
+        loadGuide();
+        setInterval(updateNowMarker, 60000);
         updateNowMarker();
+
         fetch('/api/version').then(r => r.json()).then(d => {
             if (d.version !== 'unknown') document.getElementById('app-version').textContent = 'v' + d.version;
         }).catch(e => console.log('Version check failed:', e));
