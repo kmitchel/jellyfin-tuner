@@ -1,3 +1,5 @@
+USE ZAPLINK Instead!
+
 # Express M3U Tuner 📺
 
 A high-performance ExpressJS server for turning your USB DVB/ATSC tuners into a network-accessible M3U playlist with full XMLTV Electronic Program Guide (EPG) support.
