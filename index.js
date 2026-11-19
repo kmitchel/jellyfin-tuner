@@ -154,8 +154,9 @@ function escapeXml(unsafe) {
 // Helper: Format date for XMLTV (Pure UTC for maximum compatibility)
 function formatXmltvDate(ts) {
     const d = new Date(ts);
-    const pad = n => n < 10 ? '0' + n : n;
-    return d.getUTCFullYear() +
+    // Always return strings: a numeric pad() made '+' add the parts instead of joining them
+    const pad = n => String(n).padStart(2, '0');
+    return String(d.getUTCFullYear()) +
         pad(d.getUTCMonth() + 1) +
         pad(d.getUTCDate()) +
         pad(d.getUTCHours()) +
